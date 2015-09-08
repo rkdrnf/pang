@@ -65,7 +65,6 @@ var game_core = function(game_instance){
 
     this.color = localStorage.getItem('color') || '#cc8822';
     localStorage.setItem('color', this.color);
-    this.players.self.color = this.color;
 
     if (String(window.location).indexOf('debug') != -1) {
       this.client.create_debug_gui();
@@ -81,8 +80,28 @@ if ('undefined' != typeof(global)) {
 }
 
 game_core.prototype.new_player = function(player) {
-  this.players[player.id] = new game_player(this, player);
-  this.players[player.id].pos = {x:20, y:20};
+	var new_player = new game_player(this, player);
+	new_player.instance = player;
+  new_player.pos = {x:20, y:20};
+	new_player.color = this.color;
+
+	var existing_infos = [];
+
+	this.players.forEach(function(id, index, arr) {
+		//send new player info to existing players.
+		this.players[id].instance.emit('player_info', {
+			players: [new_player.get_info()]
+		});
+
+		existing_infos.push(this.players[id].get_info());
+	}.bind(this));
+ 
+	//send existing player infos to new player.
+	new_player.instance.emit('player_info', {
+		players: existing_infos
+	});
+
+ this.players[player.id] = new_player;
 };
 
     // (4.22208334636).fixed(n) will return fixed point value to n places, default n = 3
@@ -136,6 +155,14 @@ game_core.prototype.v_lerp = function(v,tv,t) { return { x: this.lerp(v.x, tv.x,
             //the server already knows who they are. If the server starts a game
             //with only a host, the other player is set up in the 'else' below
         this.pos = { x:20, y:20 };
+
+				this.get_info = function() {
+					return {
+						id: this.instance.id,
+						pos: this.pos,
+						color: this.color
+					};
+				};
 
     }; //game_player.constructor
 
@@ -875,6 +902,14 @@ game_core.prototype.client_create_debug_gui = function() {
         _netsettings.open();
 
 }; //game_core.client_create_debug_gui
+game_core.prototype.client_on_receive_player_info = function(data) {
+	data.players.forEach(function(p_info, index, arr) {
+		var player = new game_player(p_info);
+		this.players[p_info.id] = player;	
+  	this.players[p_info.id].pos = p_info.pos;
+		this.players[p_info.id].color = p_info.color;
+	}.bind(this));
+};
 
 game_core.prototype.client_reset_positions = function() {
 
@@ -1053,6 +1088,7 @@ game_core.prototype.client_connect_to_server = function() {
             //On error we just show that we are not connected for now. Can print the data.
         this.socket.on('error', this.client_ondisconnect.bind(this));
             //On message from the server, we parse the commands and send it to the handlers
+				this.socket.on('player_info', this.client_on_receive_player_info.bind(this));
         this.socket.on('message', this.client_onnetmessage.bind(this));
 
 }; //game_core.client_connect_to_server
@@ -1095,15 +1131,6 @@ game_core.prototype.client_draw_info = function() {
         this.ctx.fillText(' This only applies to other clients when prediction is enabled, and applies to local player with no prediction.', 170 , 230);
 
     } //if this.show_help
-
-        //Draw some information for the host
-    if(this.players.self.host) {
-
-        this.ctx.fillStyle = 'rgba(255,255,255,0.7)';
-        this.ctx.fillText('You are the host', 10 , 465);
-
-    } //if we are the host
-
 
         //Reset the style back to full white.
     this.ctx.fillStyle = 'rgba(255,255,255,1)';

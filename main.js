@@ -2,23 +2,20 @@ var express = require('express');
 var app = express();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
-var uuid = require('uuid');
-
-app.use(session({
-  genid: function(req) {
-    return uuid.v1();
-  },
-  secret: 'mysecret'
-}));
-
+var uuid = require('node-uuid');
 
 app.use(express.static('client'));
 
 app.set('views', './views');
-app.set('view engine', 'jade');
 
 app.get('/', function(req, res){
-  res.render('game');
+  res.sendfile('/index.html', { root:__dirname });
+});
+
+
+app.get('/*', function(req, res, next) {
+	var file = req.params[0];
+	res.sendfile(__dirname + '/' + file);
 });
 
 http.listen(3000, function(){

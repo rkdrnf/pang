@@ -1,10 +1,11 @@
 var game_server = module.exports = { games: {}, game_count: 0 };
-var uuid = require('uuid');
+var uuid = require('node-uuid');
 
 
 global.window = global.document = global;
 
 require('./game_core.js');
+
 
 game_server.local_time = 0;
 game_server._dt = new Date().getTime();
@@ -38,11 +39,13 @@ game_server.onInput = function(client, input) {
   }
 };
 
+
 game_server.createGame = function(player) {
   var the_game = {
-    id: uuid.v1();
+    id: uuid.v1(),
     players: {},
-    player_count: 1
+    player_count: 0,
+		max_player_count: 10
   };
 
   players[player.id] = player;
@@ -53,15 +56,13 @@ game_server.createGame = function(player) {
   the_game.gamecore = new game_core(the_game);
   the_game.gamecore.update(new Date().getTime());
 
-  the_game.gamecore.new_player(player);
 
 
-  player.emit('s_gameLocalTime', the_game.gamecore.local_time);
   console.log('game created at ' + the_game.gamecore.local_time);
-  player.game = the_game;
-
 
   startGame(the_game);
+
+	this.joinGame(the_game, player);
 
   return the_game;
 };
@@ -89,10 +90,13 @@ game_server.startGame = function(game) {
 };
 
 game_server.joinGame = function(game, player) {
-  game.players[player.id].emit('s.playerIDs', game.getPlayerIDs());
+	game.player_count++;
+	game.players[player.id] = player;
+  game.players[player.id].emit('s.serverLocalTime', game.gamecore.local_time);
   game.players[player.id].game = game;
 
-  game.players[player.id].emit('s.serverLocalTime', game.gamecore.local_time);
+	game.gamecore.new_player(player);
+
 };
 
 game_server.findGame = function(player) {
@@ -110,11 +114,7 @@ game_server.findGame = function(player) {
       if(game_instance.player_count < game_instance.max_player_count) {
         joined_a_game = true;
 
-        game_instance.players[player.id] = player;
-        game_instance.gamecore.new_player(player);
-        //game_instance.gamecore.players[player.id].instance = player;
-        game_instance.player_count++;
-
+        
         this.joinGame(game_instance, player);
       }
 
@@ -127,3 +127,5 @@ game_server.findGame = function(player) {
     this.createGame(player);
   }
 };
+
+
