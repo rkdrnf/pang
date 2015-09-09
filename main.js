@@ -38,12 +38,17 @@ io.on('connection', function(client){
 		game_server.onMessage(client, m);
 	});
 
+	client.on('client_input', function(m){
+		game_server.onInput(client, m);
+	});
+
 	client.on('disconnect', function(){
 
 		console.log('client disconnected' + client.user_id + ' ' + client.game_id);
 
 		if (client.game) {
-			game_server.endGame(client.game.id, client);
+			game_server.disconnect_player(client.game.id, client.user_id);
+			//game_server.endGame(client.game.id, client.user_id);
 		}
 	});
 });
