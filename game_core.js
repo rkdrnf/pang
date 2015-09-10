@@ -1,5 +1,8 @@
-var frame_tiem = 60/1000;
-if('undefeind' != typeof(global)) frame_time = 45;
+var uuid = require('node-uuid');
+
+var frame_time = 60/1000;
+if('undefined' != typeof(global)) frame_time = 45;
+console.log('frame_time : ' + frame_time);
 
 (function() {
 	var lastTime =0;
@@ -42,6 +45,8 @@ var game_core = function(game_instance){
 		this.ghosts = {};
 	}
 
+	this.stage = new stage(this);
+	this.timers = {};
 
 	this.playerspeed = 120;
 
@@ -54,6 +59,7 @@ var game_core = function(game_instance){
 
 	this.create_physics_simulation();
 	this.create_timer();
+	this.stage.start();
 
 	if (!this.server) {
 		this.keyboard = new THREEx.KeyboardState();
@@ -81,6 +87,58 @@ var game_core = function(game_instance){
 if ('undefined' != typeof(global)) {
 	module.exports = global.game_core = game_core;
 }
+
+game_core.prototype.register_timer = function(timer) {
+	timer.timer_id = uuid.v1();
+	this.timers[timer.timer_id] = {
+		job_queue: [],
+		timer: timer
+	}
+
+	timer.timer_manager = this;
+};
+
+game_core.prototype.add_timer = function(timer_id, job_id, time) {
+	if (!timer_id) {
+		console.log('ERROR. unregistered timer added timer job');
+	}
+	
+	this.timers[timer_id].job_queue.push({
+		job_id: job_id,
+		time: time	
+	});
+
+	function sort_timer_job(a,b) {
+		if (a.time < b.time)
+			return -1;
+		if (a.time > b.time)
+			return 1;
+		return 0;
+	}
+
+	this.timers[timer_id].job_queue.sort(sort_timer_job);
+};
+
+game_core.prototype.check_timers = function(dt) {
+	for (var timer_id in this.timers) {
+		this.timers[timer_id].timer.on_timer_tick(dt);
+		while (true) {
+			if (this.timers[timer_id].job_queue.length > 0) {
+				var job = this.timers[timer_id].job_queue[0];
+				if (job.time < 0) {
+					var timer = this.timers[timer_id].timer;
+					timer.on_timer(job.job_id);
+					this.timers[timer_id].job_queue.splice(0,1);
+				} else {
+					job.time -= dt;
+					break;
+				}
+			} else {
+				break;
+			}
+		}
+	}
+};
 
 game_core.prototype.new_player = function(player) {
 	var new_player = new game_player(this, player);
@@ -111,7 +169,32 @@ game_core.prototype.new_player = function(player) {
 		players: existing_infos
 	});
 
+	//send stage info to new player.
+	new_player.instance.emit('new_stage', {
+		time_left: this.stage.time_left
+	});
+
 };
+
+game_core.prototype.on_new_stage = function(stage) {
+	this.broadcast('new_stage', {
+		time_left: stage.time_left
+	});
+}
+
+
+game_core.prototype.on_stage_end = function(stage) {
+	for(id in this.players) {
+		this.players[id].pos = {
+			x: 20,
+			y: 20
+		};
+	}
+}
+
+game_core.prototype.client_stage_time_left = function(data) {
+	this.stage.client_new_stage(data.time_left);
+}
 
 // (4.22208334636).fixed(n) will return fixed point value to n places, default n = 3
 Number.prototype.fixed = function(n) { n = n || 3; return parseFloat(this.toFixed(n)); };
@@ -215,6 +298,8 @@ game_core.prototype.update = function(t) {
 	} else {
 		this.server_update();
 	}
+
+	this.check_timers(this.dt, t);
 
 	//schedule the next update
 	this.updateid = window.requestAnimationFrame( this.update.bind(this), this.viewport );
@@ -831,7 +916,7 @@ game_core.prototype.client_create_ping_timer = function() {
 
 game_core.prototype.client_create_configuration = function() {
 
-	this.show_help = true;             //Whether or not to draw the help text
+	this.show_help = false;             //Whether or not to draw the help text
 	this.naive_approach = false;        //Whether or not to use the naive approach
 	this.show_server_pos = false;       //Whether or not to show the server position
 	this.show_dest_pos = false;         //Whether or not to show the interpolation goal
@@ -1139,6 +1224,7 @@ game_core.prototype.client_connect_to_server = function() {
 	this.socket.on('error', this.client_ondisconnect.bind(this));
 	//On message from the server, we parse the commands and send it to the handlers
 	this.socket.on('player_info', this.client_on_receive_player_info.bind(this));
+	this.socket.on('new_stage', this.client_stage_time_left.bind(this));
 	this.socket.on('message', this.client_onnetmessage.bind(this));
 	this.socket.on('player_disconnected', this.client_on_player_disconnected.bind(this));
 
@@ -1186,4 +1272,59 @@ game_core.prototype.client_draw_info = function() {
 	//Reset the style back to full white.
 	this.ctx.fillStyle = 'rgba(255,255,255,1)';
 
+
+	this.ctx.fillText('time left : ' + this.stage.time_left.fixed(3), 30, 30);
+
 };
+
+
+var stage = function(game_instance) {
+	this.stage_time = 30;
+	this.time_left = this.stage_time;
+	this.game = game_instance;
+
+	this.timer_job = {
+		STAGE_END : 0
+	};
+	
+	this.start = function() {
+		this.game.register_timer(this);
+		if (this.game.server) {
+			this.server_new_stage();
+		}
+	}
+
+	this.server_new_stage = function() {
+		this.time_left = this.stage_time;
+		this.game.add_timer(this.timer_id, this.timer_job.STAGE_END, this.time_left);
+		this.game.on_new_stage(this);
+	}
+
+	this.client_new_stage = function(t) {
+		this.time_left = t;
+	}
+	
+	this.on_timer = function(job_id) {
+		this.game.on_stage_end(this);
+		this.server_new_stage();
+	}
+
+	this.on_timer_tick = function(dt, t) {
+		this.time_left -= dt;
+	}
+}
+
+
+
+var c_timer = function() {
+	this.timer_id;
+	this.on_timer_tick = function(dt, t) {
+		//implement in inherited class
+	}
+	this.on_timer = function(job_id) { 
+		//implement in inherited class
+	}
+};
+
+stage.prototype = Object.create(c_timer.prototype);
+
