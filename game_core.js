@@ -1,4 +1,5 @@
 var uuid = require('node-uuid');
+var p2 = require('p2');
 
 var frame_time = 60/1000;
 if('undefined' != typeof(global)) frame_time = 45;
@@ -37,6 +38,28 @@ var game_core = function(game_instance){
 		height : 480
 	};
 
+
+	this.physics_world = new p2.World({
+		gravity:[0, 9.87]
+	});
+
+	this.circleBody = new p2.Body({
+		mass:5,
+		position: [40, 50]
+	});
+	var circleShape = new p2.Circle({ radius: 10 });
+	this.circleBody.addShape(circleShape);
+	this.physics_world.addBody(this.circleBody);
+
+	this.groundBody = new p2.Body({
+		mass:0,
+		angle: Math.PI,
+		position: [0, this.world.height - 40]
+	});
+	var groundShape = new p2.Plane();
+	this.groundBody.addShape(groundShape);
+	this.physics_world.addBody(this.groundBody);
+
 	if (this.server) {
 		this.players = {};
 	} else {
@@ -73,8 +96,6 @@ var game_core = function(game_instance){
 		this.color = localStorage.getItem('color') || '#cc8822';
 		localStorage.setItem('color', this.color);
 
-
-		console.log(String(window.location));
 		if (String(window.location).indexOf('debug') != -1) {
 			this.client_create_debug_gui();
 		}
@@ -102,7 +123,7 @@ game_core.prototype.add_timer = function(timer_id, job_id, time) {
 	if (!timer_id) {
 		console.log('ERROR. unregistered timer added timer job');
 	}
-	
+
 	this.timers[timer_id].job_queue.push({
 		job_id: job_id,
 		time: time	
@@ -164,7 +185,7 @@ game_core.prototype.new_player = function(player) {
 	}
 
 	//send existing player infos to new player.
-	
+
 	new_player.instance.emit('player_info', {
 		players: existing_infos
 	});
@@ -401,10 +422,14 @@ game_core.prototype.physics_movement_vector_from_direction = function(x,y) {
 
 game_core.prototype.update_physics = function() {
 
+	this.physics_world.step(0.015, this._pdt, 10);
+	this.call_count++;
+
 	if(this.server) {
 		this.server_update_physics();
 	} else {
 		this.client_update_physics();
+
 	}
 
 }; //game_core.prototype.update_physics
@@ -875,6 +900,9 @@ game_core.prototype.client_update = function() {
 		}
 	}
 
+	this.circleBody.draw();
+	this.groundBody.draw();
+
 	//Work out the fps average
 	this.client_refresh_fps();
 
@@ -889,10 +917,13 @@ game_core.prototype.create_timer = function(){
 }
 
 game_core.prototype.create_physics_simulation = function() {
+	this.physics_start = new Date().getTime();
+	this.call_count = 0;
 
 	setInterval(function(){
 		this._pdt = (new Date().getTime() - this._pdte)/1000.0;
 		this._pdte = new Date().getTime();
+
 		this.update_physics();
 	}.bind(this), 15);
 
@@ -1012,22 +1043,22 @@ game_core.prototype.client_on_receive_player_info = function(data) {
 		var player = new game_player(this);
 		player.state = 'connected'
 		player.online = 'true';
-		this.players[p_info.id] = player;	
-		this.players[p_info.id].pos = p_info.pos;
-		this.players[p_info.id].color = '#ffffff';
-		this.ghosts[p_info.id] = {
-			server_pos: new game_player(this),
-			client_pos: new game_player(this)
-		};
+	this.players[p_info.id] = player;	
+	this.players[p_info.id].pos = p_info.pos;
+	this.players[p_info.id].color = '#ffffff';
+	this.ghosts[p_info.id] = {
+		server_pos: new game_player(this),
+		client_pos: new game_player(this)
+	};
 
-		if(this.players.self.id == p_info.id) {
-			var self = this.players.self;
-			
-			this.players.self = player;
-			player.color = '#cc0000';
-			player.id = self.id;
-			player.info_color = '#cc0000';
-		}
+	if(this.players.self.id == p_info.id) {
+		var self = this.players.self;
+
+		this.players.self = player;
+		player.color = '#cc0000';
+		player.id = self.id;
+		player.info_color = '#cc0000';
+	}
 	}.bind(this));
 };
 
@@ -1115,7 +1146,7 @@ game_core.prototype.client_onconnected = function(data) {
 	//The server responded that we are now in a game,
 	//this lets us store the information about ourselves and set the colors
 	//to show we are now ready to be playing.
-	
+
 	this.players.self.id = data.id;
 	this.players.self.info_color = '#cc0000';
 	this.players.self.state = 'connected';
@@ -1286,7 +1317,7 @@ var stage = function(game_instance) {
 	this.timer_job = {
 		STAGE_END : 0
 	};
-	
+
 	this.start = function() {
 		this.game.register_timer(this);
 		if (this.game.server) {
@@ -1303,7 +1334,7 @@ var stage = function(game_instance) {
 	this.client_new_stage = function(t) {
 		this.time_left = t;
 	}
-	
+
 	this.on_timer = function(job_id) {
 		this.game.on_stage_end(this);
 		this.server_new_stage();
@@ -1327,4 +1358,34 @@ var c_timer = function() {
 };
 
 stage.prototype = Object.create(c_timer.prototype);
+
+
+p2.Body.prototype.draw = function() {
+	this.shapes.forEach(function(shape){
+		shape.draw({
+			x: this.position[0],
+			y: this.position[1]
+		});
+	}.bind(this));
+};
+
+p2.Circle.prototype.draw = function(pos) {
+	game.ctx.fillStyle = '#ffffff';
+	
+	game.ctx.beginPath();
+	game.ctx.arc(pos.x, pos.y, this.radius, 0, 2 * Math.PI, false);
+	game.ctx.fill();
+};
+
+p2.Box.prototype.draw = function(pos) {
+	game.ctx.fillStyle = '#ffffff';
+
+	game.ctx.fillRect(pos.x, pos.y, this.width, this.height);
+};
+
+p2.Plane.prototype.draw = function(pos) {
+	game.ctx.fillStyle = '#eeeeee';
+	
+	game.ctx.fillRect(0, pos.y, game.world.width, game.world.height - pos.y);
+};
 
