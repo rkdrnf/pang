@@ -33,6 +33,8 @@ var game_core = function(game_instance){
 	this.instance = game_instance;
 	this.server = this.instance !== undefined;
 
+  this.initial_position = {x: 100, y: 40};
+
 	this.world = {
 		width : 720,
 		height : 480
@@ -43,13 +45,13 @@ var game_core = function(game_instance){
 		gravity:[0, 9.87]
 	});
 
-	this.circleBody = new p2.Body({
-		mass:5,
-		position: [40, 50]
-	});
-	var circleShape = new p2.Circle({ radius: 10 });
-	this.circleBody.addShape(circleShape);
-	this.physics_world.addBody(this.circleBody);
+  this.collision_group = {
+    PLAYER: Math.pow(2,0),
+    ENEMY: Math.pow(2,1),
+    GROUND: Math.pow(2,2)
+  };
+
+  this.enemies = {};
 
 	this.groundBody = new p2.Body({
 		mass:0,
@@ -57,6 +59,8 @@ var game_core = function(game_instance){
 		position: [0, this.world.height - 40]
 	});
 	var groundShape = new p2.Plane();
+  groundShape.collisionGroup = this.collision_group.GROUND;
+  groundShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY;
 	this.groundBody.addShape(groundShape);
 	this.physics_world.addBody(this.groundBody);
 
@@ -71,7 +75,7 @@ var game_core = function(game_instance){
 	this.stage = new stage(this);
 	this.timers = {};
 
-	this.playerspeed = 120;
+	this.playerspeed = 480;
 
 	this._pdt = 0.0001;
 	this._pdte = new Date().getTime();
@@ -126,7 +130,7 @@ game_core.prototype.add_timer = function(timer_id, job_id, time) {
 
 	this.timers[timer_id].job_queue.push({
 		job_id: job_id,
-		time: time	
+		time: time
 	});
 
 	function sort_timer_job(a,b) {
@@ -151,6 +155,7 @@ game_core.prototype.check_timers = function(dt) {
 					timer.on_timer(job.job_id);
 					this.timers[timer_id].job_queue.splice(0,1);
 				} else {
+          //wrong implementation
 					job.time -= dt;
 					break;
 				}
@@ -161,17 +166,40 @@ game_core.prototype.check_timers = function(dt) {
 	}
 };
 
+game_core.prototype.add_enemy = function(radius, pos) {
+  var enemy_id = uuid.v1();
+  var enemy = new c_enemy(this, enemy_id, radius, pos);
+  this.enemies[enemy_id] = enemy;
+};
+
+game_core.prototype.receive_enemy_info = function(info) {
+  info.forEach(function(enemy_info) {
+    this.enemies[enemy_info.id] = new c_enemy(this, enemy_info.id, enemy_info.radius, enemy_info.pos);
+  }.bind(this));
+};
+
+game_core.prototype.clear_enemies = function() {
+  Object.keys(this.enemies).forEach(function(enemy) {
+    delete this.enemies[enemy.id];
+  }.bind(this));
+};
+
 game_core.prototype.new_player = function(player) {
-	var new_player = new game_player(this, player);
+	var new_player = new game_player(this, player, false);
 	new_player.instance = player;
-	new_player.pos = {x:20, y:20};
+	new_player.pos = this.initial_position;
 	new_player.color = this.color;
+
+  console.log(this.players);
+  if (Object.keys(this.players).length == 0) {
+    new_player.is_dead = false;
+  }
 
 	this.players[player.user_id] = new_player;
 	var existing_infos = [];
 
 	for(id in this.players) {
-		existing_infos.push(this.players[id].get_info());	
+		existing_infos.push(this.players[id].get_info());
 
 		if (id == player.user_id) {
 			continue;
@@ -190,19 +218,35 @@ game_core.prototype.new_player = function(player) {
 		players: existing_infos
 	});
 
+
+  var enemies_info = [];
+  Object.keys(this.enemies).forEach(function(id) {
+    var enemy = this.enemies[id];
+    enemies_info.push({
+      id: enemy.id,
+      radius: enemy.p_shape.radius,
+      pos: enemy.pos
+    });
+  }.bind(this));
 	//send stage info to new player.
-	new_player.instance.emit('new_stage', {
-		time_left: this.stage.time_left
+	new_player.instance.emit('current_stage', {
+		time_left: this.stage.time_left,
+    enemies_info: enemies_info
 	});
 
 };
 
 game_core.prototype.on_new_stage = function(stage) {
+  Object.keys(this.players).forEach(function(id) {
+    var player = this.players[id];
+    player.p_body.position = this.p_vec2(this.initial_position);
+    player.p_body.velocity = [0, 0];
+    player.is_dead = false;
+  }.bind(this));
 	this.broadcast('new_stage', {
 		time_left: stage.time_left
 	});
 }
-
 
 game_core.prototype.on_stage_end = function(stage) {
 	for(id in this.players) {
@@ -211,16 +255,24 @@ game_core.prototype.on_stage_end = function(stage) {
 			y: 20
 		};
 	}
-}
+};
 
-game_core.prototype.client_stage_time_left = function(data) {
+game_core.prototype.client_on_new_stage = function(data) {
 	this.stage.client_new_stage(data.time_left);
-}
+};
+
+game_core.prototype.client_on_current_stage = function(data) {
+  this.stage.client_current_stage(data.time_left, data.enemies_info);
+};
 
 // (4.22208334636).fixed(n) will return fixed point value to n places, default n = 3
 Number.prototype.fixed = function(n) { n = n || 3; return parseFloat(this.toFixed(n)); };
 //copies a 2d vector like object from one to another
 game_core.prototype.pos = function(a) { return {x:a.x,y:a.y}; };
+//convert physics vector2 to game vector2
+game_core.prototype.g_vec2 = function(a) { return {x:a[0], y:a[1]}; };
+//convert game vector2 to physics vector2
+game_core.prototype.p_vec2 = function(a) { return [a.x, a.y]; };
 //Add a 2d vector with another one and return the resulting vector
 game_core.prototype.v_add = function(a,b) { return { x:(a.x+b.x).fixed(), y:(a.y+b.y).fixed() }; };
 //Subtract a 2d vector with another one and return the resulting vector
@@ -234,14 +286,44 @@ game_core.prototype.lerp = function(p, n, t) { var _t = Number(t); _t = (Math.ma
 //Simple linear interpolation between 2 vectors
 game_core.prototype.v_lerp = function(v,tv,t) { return { x: this.lerp(v.x, tv.x, t), y:this.lerp(v.y, tv.y, t) }; };
 
-var game_player = function( game_instance, player_instance ) {
+var c_enemy = function(game, id, radius, pos ) {
+  this.game = game;
+  this.id = id;
+
+  this.pos = {x: 30, y: 50};
+
+  if (pos) {
+    this.pos = pos;
+  }
+
+  this.p_body = new p2.Body({
+    mass: 1,
+    position: this.game.p_vec2(pos)
+  });
+
+  this.p_shape = new p2.Circle({
+    radius: radius ? radius : 10
+  });
+  this.p_shape.collisionGroup = this.game.collision_group.PLAYER;
+  this.p_shape.collisionMask = this.game.collision_group.GROUND;
+
+  this.p_body.addShape(this.p_shape);
+  this.game.physics_world.addBody(this.p_body);
+};
+
+c_enemy.prototype.draw = function() {
+  this.p_body.draw();
+};
+
+var game_player = function( game_instance, player_instance, is_ghost ) {
 
 	//Store the instance, if any
 	this.instance = player_instance;
 	this.game = game_instance;
 
+
 	//Set up initial values for our state information
-	this.pos = { x:0, y:0 };
+	this.pos = { x:100, y:50 };
 	this.size = { x:16, y:16, hx:8, hy:8 };
 	this.state = 'not-connected';
 	this.color = 'rgba(255,255,255,0.1)';
@@ -253,8 +335,30 @@ var game_player = function( game_instance, player_instance ) {
 	this.cur_state = {pos:{x:0,y:0}};
 	this.state_time = new Date().getTime();
 
+  this.is_dead = true;
+
 	//Our local history of inputs
 	this.inputs = [];
+
+  //physics initalization
+  console.log(is_ghost);
+  if (!is_ghost)
+  {
+    this.p_body = new p2.Body({
+      mass: 1,
+      position: [100, 50]
+    });
+    this.p_shape = new p2.Box({
+      width: 15,
+      height: 15
+    });
+
+    this.p_shape.collisionGroup = this.game.collision_group.ENEMY;
+    this.p_shape.collisionMask = this.game.collision_group.GROUND;
+    this.p_body.addShape(this.p_shape);
+    this.game.physics_world.addBody(this.p_body);
+  }
+
 
 	//The world bounds we are confined to
 	this.pos_limits = {
@@ -267,13 +371,14 @@ var game_player = function( game_instance, player_instance ) {
 	//The 'host' of a game gets created with a player instance since
 	//the server already knows who they are. If the server starts a game
 	//with only a host, the other player is set up in the 'else' below
-	this.pos = { x:20, y:20 };
 
 	this.get_info = function() {
 		return {
 			id: this.id,
-				pos: this.pos,
-				color: this.color
+      pos: this.pos,
+      color: this.color,
+      is_dead: this.is_dead
+
 		};
 	};
 
@@ -281,7 +386,14 @@ var game_player = function( game_instance, player_instance ) {
 
 
 game_player.prototype.draw = function(){
+  console.log(this.is_dead);
 
+  if (!this.is_dead)
+  {
+    this.p_body.draw();
+  }
+
+  /*
 	//Set the color for this player
 	game.ctx.fillStyle = this.color;
 
@@ -291,6 +403,7 @@ game_player.prototype.draw = function(){
 	//Draw a status update
 	game.ctx.fillStyle = this.info_color;
 	game.ctx.fillText(this.state, this.pos.x+10, this.pos.y + 4);
+  */
 
 }; //game_player.draw
 
@@ -324,7 +437,6 @@ game_core.prototype.update = function(t) {
 
 	//schedule the next update
 	this.updateid = window.requestAnimationFrame( this.update.bind(this), this.viewport );
-
 }; //game_core.update
 
 
@@ -422,8 +534,6 @@ game_core.prototype.physics_movement_vector_from_direction = function(x,y) {
 
 game_core.prototype.update_physics = function() {
 
-	this.physics_world.step(0.015, this._pdt, 10);
-	this.call_count++;
 
 	if(this.server) {
 		this.server_update_physics();
@@ -432,8 +542,29 @@ game_core.prototype.update_physics = function() {
 
 	}
 
+  this.physics_world.step(0.015, this._pdt, 10);
+	this.call_count++;
+
+  this.after_step();
+
 }; //game_core.prototype.update_physics
 
+game_core.prototype.after_step = function() {
+  Object.keys(this.players).forEach(function(id) {
+    if (id == 'self') return;
+
+
+    var player = this.players[id];
+
+    console.log(player.p_body.position);
+    player.pos = this.g_vec2(player.p_body.position);
+  }.bind(this));
+
+  Object.keys(this.enemies).forEach(function(id) {
+    var enemy = this.enemies[id];
+    enemy.pos = this.g_vec2(enemy.p_body.position);
+  }.bind(this));
+};
 /*
 
 	 Server side functions
@@ -448,9 +579,9 @@ game_core.prototype.server_update_physics = function() {
 
 	//process physics function
 	var process_physics = function(player) {
-		player.old_state.pos = this.pos( player.pos );
+		player.old_state.pos = this.g_vec2(player.p_body.position);
 		var new_dir = this.process_input(player);
-		player.pos = this.v_add( player.old_state.pos, new_dir );
+    player.p_body.velocity = this.p_vec2({ x: new_dir.x, y: player.p_body.velocity[1] });
 	}.bind(this);
 
 	for(id in this.players)
@@ -473,19 +604,30 @@ game_core.prototype.server_update = function(){
 	//Update the state of our local clock to match the timer
 	this.server_time = this.local_time;
 
-	states = {};
+	var states = {};
 
 	for(var id in this.players)
 	{
 		states[id] = {
 			pos: this.players[id].pos,
-			is: this.players[id].last_input_seq
+			is: this.players[id].last_input_seq,
+      dead: this.players[id].is_dead
 		};
 	}
+
+  var enemy_states = {};
+
+  Object.keys(this.enemies).forEach(function(id) {
+    var enemy = this.enemies[id];
+    enemy_states[id] = {
+      pos: enemy.pos
+    };
+  }.bind(this));
 
 	//Make a snapshot of the current state, for updating the clients
 	this.laststate = {
 		player_states : states,
+    enemy_states : enemy_states,
 		t   : this.server_time                      // our current local time on the server
 	};
 
@@ -637,6 +779,8 @@ game_core.prototype.client_process_net_prediction_correction = function() {
 			var number_to_clear = Math.abs(lastinputseq_index - (-1));
 			this.players.self.inputs.splice(0, number_to_clear);
 			//The player is now located at the new server position, authoritive server
+      console.log(my_server_pos);
+      this.players.self.p_body.position = this.p_vec2(my_server_pos);
 			this.players.self.cur_state.pos = this.pos(my_server_pos);
 			this.players.self.last_input_seq = lastinputseq_index;
 			//Now we reapply all the inputs that we have locally that
@@ -713,10 +857,19 @@ game_core.prototype.client_process_net_updates = function() {
 		//The most recent server update
 		var latest_server_data = this.server_updates[ this.server_updates.length-1 ];
 
+    //state update
+    for(var id in this.players) {
+      if (id == 'self') continue;
+			if (!latest_server_data.player_states[id]) continue;
+
+      this.players[id].is_dead = latest_server_data.player_states[id].dead;
+    }
+
 		for(var id in this.players)
 		{
 			if (id == this.players.self.id || id == 'self') continue;
 			if (!latest_server_data.player_states[id]) continue;
+      if (!target.player_states[id] || !previous.player_states[id]) continue;
 
 			//These are the exact server positions from this tick, but only for the ghost
 			var other_server_pos = latest_server_data.player_states[id].pos;
@@ -729,13 +882,35 @@ game_core.prototype.client_process_net_updates = function() {
 			this.ghosts[id].server_pos.pos = this.pos(other_server_pos);
 			this.ghosts[id].client_pos.pos = this.v_lerp(other_past_pos, other_target_pos, time_point);
 
+
 			var other = this.players[id];
 			if (this.client_smoothing) {
-				other.pos = this.v_lerp(other.pos, this.ghosts[id].client_pos.pos, this._pdt*this.client_smooth);
+				other.p_body.position = this.p_vec2(this.v_lerp(other.pos, this.ghosts[id].client_pos.pos, this._pdt*this.client_smooth));
 			} else {
-				other.pos = this.pos(this.ghosts[id].client_pos.pos);
+				other.p_body.position = this.p_vec2(this.pos(this.ghosts[id].client_pos.pos));
 			}
 		}
+
+    for (var id in this.enemies) {
+			if (!latest_server_data.enemy_states[id]) continue;
+      if (!target.enemy_states[id] || !previous.enemy_states[id]) continue;
+
+			//The other players positions in this timeline, behind us and in front of us
+			var other_target_pos = target.enemy_states[id].pos;
+			var other_past_pos = previous.enemy_states[id].pos;
+
+			//update the dest block, this is a simple lerp
+			//to the target from the previous point in the server_updates buffer
+			var client_pos = this.v_lerp(other_past_pos, other_target_pos, time_point);
+
+			var other = this.enemies[id];
+			if (this.client_smoothing) {
+				other.p_body.position = this.p_vec2(this.v_lerp(other.pos, client_pos, this._pdt*this.client_smooth));
+			} else {
+				other.p_body.position = this.p_vec2(this.pos(client_pos));
+			}
+
+    }
 
 		//Now, if not predicting client movement , we will maintain the local player position
 		//using the same method, smoothing the players information from the past.
@@ -755,9 +930,9 @@ game_core.prototype.client_process_net_updates = function() {
 
 			//Smoothly follow the destination position
 			if(this.client_smoothing) {
-				this.players.self.pos = this.v_lerp( this.players.self.pos, local_target, this._pdt*this.client_smooth);
+				this.players.self.p_body.position = this.p_vec2(this.v_lerp( this.players.self.pos, local_target, this._pdt*this.client_smooth));
 			} else {
-				this.players.self.pos = this.pos( local_target );
+				this.players.self.p_body.position = this.p_vec2(this.pos( local_target ));
 			}
 		}
 
@@ -784,7 +959,7 @@ game_core.prototype.client_onserverupdate_recieved = function(data){
 
 	if(this.naive_approach) {
 		for(var id in data.player_states) {
-			this.players[id].pos = data.player_states[id].pos;
+      this.players[id].p_body.position = this.p_vec2(data.player_states[id]).pos;
 		}
 	} else {
 
@@ -844,9 +1019,9 @@ game_core.prototype.client_update_physics = function() {
 	if(this.client_predict) {
 		if (!(this.players.self) || !(this.players.self.state == 'connected')) return;
 
-		this.players.self.old_state.pos = this.pos( this.players.self.cur_state.pos );
+		this.players.self.old_state.pos = this.g_vec2(this.players.self.p_body.position);
 		var nd = this.process_input(this.players.self);
-		this.players.self.cur_state.pos = this.v_add( this.players.self.old_state.pos, nd);
+		this.players.self.p_body.velocity = [nd.x, this.players.self.p_body.velocity[1]];
 		this.players.self.state_time = this.local_time;
 
 	}
@@ -884,6 +1059,10 @@ game_core.prototype.client_update = function() {
 		this.players[id].draw();
 	}
 
+  for(var id in this.enemies) {
+    this.enemies[id].draw();
+  }
+
 	//and these
 	if(this.show_dest_pos && !this.naive_approach) {
 		for(var id in this.players) {
@@ -900,7 +1079,6 @@ game_core.prototype.client_update = function() {
 		}
 	}
 
-	this.circleBody.draw();
 	this.groundBody.draw();
 
 	//Work out the fps average
@@ -1040,15 +1218,16 @@ game_core.prototype.client_create_debug_gui = function() {
 }; //game_core.client_create_debug_gui
 game_core.prototype.client_on_receive_player_info = function(data) {
 	data.players.forEach(function(p_info, index, arr) {
-		var player = new game_player(this);
+		var player = new game_player(this, undefined, false);
 		player.state = 'connected'
 		player.online = 'true';
-	this.players[p_info.id] = player;	
+	this.players[p_info.id] = player;
 	this.players[p_info.id].pos = p_info.pos;
 	this.players[p_info.id].color = '#ffffff';
+  this.players[p_info.id].is_dead = p_info.is_dead;
 	this.ghosts[p_info.id] = {
-		server_pos: new game_player(this),
-		client_pos: new game_player(this)
+		server_pos: new game_player(this, undefined, true),
+		client_pos: new game_player(this, undefined, true)
 	};
 
 	if(this.players.self.id == p_info.id) {
@@ -1255,7 +1434,8 @@ game_core.prototype.client_connect_to_server = function() {
 	this.socket.on('error', this.client_ondisconnect.bind(this));
 	//On message from the server, we parse the commands and send it to the handlers
 	this.socket.on('player_info', this.client_on_receive_player_info.bind(this));
-	this.socket.on('new_stage', this.client_stage_time_left.bind(this));
+	this.socket.on('new_stage', this.client_on_new_stage.bind(this));
+  this.socket.on('current_stage', this.client_on_current_stage.bind(this));
 	this.socket.on('message', this.client_onnetmessage.bind(this));
 	this.socket.on('player_disconnected', this.client_on_player_disconnected.bind(this));
 
@@ -1328,16 +1508,35 @@ var stage = function(game_instance) {
 	this.server_new_stage = function() {
 		this.time_left = this.stage_time;
 		this.game.add_timer(this.timer_id, this.timer_job.STAGE_END, this.time_left);
+    this.add_enemies();
 		this.game.on_new_stage(this);
-	}
+	};
 
 	this.client_new_stage = function(t) {
 		this.time_left = t;
-	}
+    this.clear_enemies();
+	};
+
+  this.client_current_stage = function(t, enemies_info) {
+    this.time_left = t;
+    this.game.receive_enemy_info(enemies_info);
+  };
+
+  //add enemies by stage's own rule
+  this.add_enemies = function() {
+    this.game.add_enemy(25, {x: 30, y: 50});
+  };
+
+  this.clear_enemies = function() {
+    this.game.clear_enemies();
+  };
+
 
 	this.on_timer = function(job_id) {
-		this.game.on_stage_end(this);
-		this.server_new_stage();
+    if (job_id == this.timer_job.STAGE_END) {
+      this.game.on_stage_end(this);
+      this.server_new_stage();
+    }
 	}
 
 	this.on_timer_tick = function(dt, t) {
@@ -1352,9 +1551,16 @@ var c_timer = function() {
 	this.on_timer_tick = function(dt, t) {
 		//implement in inherited class
 	}
-	this.on_timer = function(job_id) { 
+	this.on_timer = function(job_id) {
 		//implement in inherited class
 	}
+};
+
+c_timer.prototype.on_timer = function(job_id) {
+  //implement
+};
+
+c_timer.prototype.on_timer_tick = function(dt, t) {
 };
 
 stage.prototype = Object.create(c_timer.prototype);
@@ -1371,7 +1577,7 @@ p2.Body.prototype.draw = function() {
 
 p2.Circle.prototype.draw = function(pos) {
 	game.ctx.fillStyle = '#ffffff';
-	
+
 	game.ctx.beginPath();
 	game.ctx.arc(pos.x, pos.y, this.radius, 0, 2 * Math.PI, false);
 	game.ctx.fill();
@@ -1380,12 +1586,12 @@ p2.Circle.prototype.draw = function(pos) {
 p2.Box.prototype.draw = function(pos) {
 	game.ctx.fillStyle = '#ffffff';
 
-	game.ctx.fillRect(pos.x, pos.y, this.width, this.height);
+	game.ctx.fillRect(pos.x - this.width / 2.0, pos.y - this.height / 2.0, this.width, this.height);
 };
 
 p2.Plane.prototype.draw = function(pos) {
 	game.ctx.fillStyle = '#eeeeee';
-	
+
 	game.ctx.fillRect(0, pos.y, game.world.width, game.world.height - pos.y);
 };
 
