@@ -1,6 +1,5 @@
 var uuid = require('node-uuid');
 var	p2 = require('p2');
-var physics = require('../physicsjs/dist/physicsjs-full.min.js');
 
 var frame_time = 60/1000;
 if('undefined' != typeof(global)) frame_time = 45;
@@ -41,16 +40,9 @@ var game_core = function(game_instance){
 	};
 
 
-	this.physics_world = physics({
-		timestep: 0.015,
-		maxIPF: 16
+	this.physics_world = new p2.World({
+		gravity:[0, 9.87]
 	});
-
-	this.gravity = physics.behavior('constant-acceleration', {
-		acc: { x: 0, y: 0.0004 }
-	});
-	
-	this.physics_world.add(this.gravity);
 
 	this.collision_group = {
 		PLAYER: Math.pow(2,0),
@@ -60,17 +52,16 @@ var game_core = function(game_instance){
 
 	this.enemies = {};
 
-	this.groundBody = physics.body('rectangle', {
-		mass:1,
-		width: 200,
-		height: 10,
-		x: 200,
-		y: this.world.height - 40
+	this.groundBody = new p2.Body({
+		mass:0,
+		angle: Math.PI,
+		position: [0, this.world.height - 40]
 	});
-	console.log(this.groundBody);
+	var groundShape = new p2.Plane();
 
 	groundShape.collisionGroup = this.collision_group.GROUND;
 	groundShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY;
+	this.groundBody.addShape(groundShape);
 	this.physics_world.addBody(this.groundBody);
 
 	if (this.server) {
@@ -298,17 +289,20 @@ var c_enemy = function(game, id, radius, pos ) {
 		this.pos = pos;
 	}
 
-	this.p_body = physics.body('circle', {
+	this.p_body = new p2.Body({
 		mass: 1,
-		x: pos.x,
-		y: pos.y,
-		radius: radius ? radius : 10
+		position: [pos.x, pos.y]
+	});
+	
+	this.p_shape = new p2.Circle({
+		radius: radius ? radius: 10
 	});
 
 	this.p_shape.collisionGroup = this.game.collision_group.PLAYER;
 	this.p_shape.collisionMask = this.game.collision_group.GROUND;
 
-	this.game.physics_world.add(this.p_body);
+	this.p_body.addShape(this.p_shape);
+	this.game.physics_world.addBody(this.p_body);
 };
 
 c_enemy.prototype.draw = function() {
@@ -343,17 +337,19 @@ var game_player = function( game_instance, player_instance, is_ghost ) {
 	//physics initalization
 	if (!is_ghost)
 	{
-		this.p_body = physics.body('rectangle', {
-			x: 100,
-			y: 50,
+		this.p_body = new p2.Body({
 			mass: 1,
+			position: [100, 50]
+		});
+		this.p_shape = new p2.Box({
 			width: 15,
 			height: 15
 		});
 
 		this.p_shape.collisionGroup = this.game.collision_group.ENEMY;
 		this.p_shape.collisionMask = this.game.collision_group.GROUND;
-		this.game.physics_world.add(this.p_body);
+		this.p_body.addShape(this.p_shape);
+		this.game.physics_world.addBody(this.p_body);
 	}
 
 
@@ -537,7 +533,7 @@ game_core.prototype.update_physics = function() {
 
 	}
 
-	this.physics_world.step(this._pdte);
+	this.physics_world.step(0.015, this._pdt, 10);
 	this.call_count++;
 
 	this.after_step();
