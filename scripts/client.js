@@ -10,6 +10,7 @@
 var game = {};
 
 window.onload = function(){
+
 	//Create our game client instance.
 	game = new game_core();
 
@@ -17,8 +18,9 @@ window.onload = function(){
 	game.viewport = document.getElementById('viewport');
 
 	//Adjust their size
-	game.viewport.width = game.world.width;
-	game.viewport.height = game.world.height;
+	game.viewport.res_mul = 16;
+	game.viewport.width = game.world.width * game.viewport.res_mul;
+	game.viewport.height = game.world.height * game.viewport.res_mul;
 
 	//Fetch the rendering contexts
 	game.ctx = game.viewport.getContext('2d');

@@ -2,7 +2,7 @@ var uuid = require('node-uuid');
 var	p2 = require('p2');
 
 var frame_time = 60/1000;
-if('undefined' != typeof(global)) frame_time = 45;
+if('undefined' != typeof(global.GLOBAL)) frame_time = 45;
 
 (function() {
 	var lastTime =0;
@@ -32,17 +32,20 @@ var game_core = function(game_instance){
 	this.instance = game_instance;
 	this.server = this.instance !== undefined;
 
-	this.initial_position = {x: 100, y: 40};
+	this.initial_position = {x: 15, y: 2};
 
 	this.world = {
-		width : 720,
-		height : 480
+		width : 30,
+		height : 20
 	};
 
 
 	this.physics_world = new p2.World({
 		gravity:[0, 9.87]
 	});
+	
+	this.m2x = 16;
+	this.x2m = 0.0625;
 
 	this.collision_group = {
 		PLAYER: Math.pow(2,0),
@@ -55,7 +58,7 @@ var game_core = function(game_instance){
 	this.groundBody = new p2.Body({
 		mass:0,
 		angle: Math.PI,
-		position: [0, this.world.height - 40]
+		position: [0, this.world.height - 1]
 	});
 	var groundShape = new p2.Plane();
 
@@ -79,6 +82,8 @@ var game_core = function(game_instance){
 
 	this._pdt = 0.0001;
 	this._pdte = new Date().getTime();
+
+	this.physics_time = 0;
 
 	this.local_time = 0.016;
 	this._dt = new Date().getTime();
@@ -109,9 +114,7 @@ var game_core = function(game_instance){
 	}
 };
 
-if ('undefined' != typeof(global)) {
-	module.exports = global.game_core = game_core;
-}
+module.exports = global.game_core = game_core;
 
 game_core.prototype.register_timer = function(timer) {
 	timer.timer_id = uuid.v1();
@@ -283,7 +286,7 @@ var c_enemy = function(game, id, radius, pos ) {
 	this.game = game;
 	this.id = id;
 
-	this.pos = {x: 30, y: 50};
+	this.pos = {x: 30, y: 30};
 
 	if (pos) {
 		this.pos = pos;
@@ -295,7 +298,7 @@ var c_enemy = function(game, id, radius, pos ) {
 	});
 	
 	this.p_shape = new p2.Circle({
-		radius: radius ? radius: 10
+		radius: radius ? radius: 4
 	});
 
 	this.p_shape.collisionGroup = this.game.collision_group.PLAYER;
@@ -317,8 +320,6 @@ var game_player = function( game_instance, player_instance, is_ghost ) {
 
 
 	//Set up initial values for our state information
-	this.pos = { x:100, y:50 };
-	this.size = { x:16, y:16, hx:8, hy:8 };
 	this.state = 'not-connected';
 	this.color = 'rgba(255,255,255,0.1)';
 	this.info_color = 'rgba(255,255,255,0.1)';
@@ -331,6 +332,9 @@ var game_player = function( game_instance, player_instance, is_ghost ) {
 
 	this.is_dead = true;
 
+	this.width = 1;
+	this.height = 1;
+
 	//Our local history of inputs
 	this.inputs = [];
 
@@ -339,11 +343,11 @@ var game_player = function( game_instance, player_instance, is_ghost ) {
 	{
 		this.p_body = new p2.Body({
 			mass: 1,
-			position: [100, 50]
+			position: [this.game.initial_position.x, this.game.initial_position.y]
 		});
 		this.p_shape = new p2.Box({
-			width: 15,
-			height: 15
+			width: this.width,
+			height: this.height
 		});
 
 		this.p_shape.collisionGroup = this.game.collision_group.ENEMY;
@@ -355,10 +359,10 @@ var game_player = function( game_instance, player_instance, is_ghost ) {
 
 	//The world bounds we are confined to
 	this.pos_limits = {
-		x_min: this.size.hx,
-		x_max: this.game.world.width - this.size.hx,
-		y_min: this.size.hy,
-		y_max: this.game.world.height - this.size.hy
+		x_min: this.width / 2,
+		x_max: this.game.world.width - (this.width / 2),
+		y_min: this.height / 2,
+		y_max: this.game.world.height - (this.height / 2)
 	};
 
 	//The 'host' of a game gets created with a player instance since
@@ -538,12 +542,18 @@ game_core.prototype.update_physics = function() {
 
 	this.after_step();
 
+	if ('undefined' != typeof(global.GLOBAL) && Object.keys(this.players).length > 0 && this.physics_time < 2) {
+		var player = this.players[Object.keys(this.players)[0]];
+		this.physics_time += this._pdt;
+		console.log('up time: ' + this.physics_time + '_pdt: ' + this._pdt);
+		console.log('p_pos: ' + player.pos.y + 'p_p_pos' + player.p_body.position[1] + 'p_vel: ' + player.p_body.velocity[1] + 'p_force: ' + player.p_body.force[1]);
+	}
+
 }; //game_core.prototype.update_physics
 
 game_core.prototype.after_step = function() {
 	Object.keys(this.players).forEach(function(id) {
 		if (id == 'self') return;
-
 
 		var player = this.players[id];
 
@@ -571,7 +581,7 @@ game_core.prototype.server_update_physics = function() {
 	var process_physics = function(player) {
 		player.old_state.pos = this.g_vec2(player.p_body.position);
 		var new_dir = this.process_input(player);
-		player.p_body.velocity = this.p_vec2({ x: new_dir.x, y: player.p_body.velocity[1] });
+		player.p_body.velocity = [new_dir.x, player.p_body.velocity[1]];
 	}.bind(this);
 
 	this.for_each_player(function(player) {
@@ -942,6 +952,8 @@ game_core.prototype.client_onserverupdate_recieved = function(data){
 	//but causes terrible lag when any ping/latency is introduced. The player can not deduce any
 	//information to interpolate with so it misses positions, and packet loss destroys this approach
 	//even more so. See 'the bouncing ball problem' on Wikipedia.
+	
+	console.log(data);
 
 	if(this.naive_approach) {
 		for(var id in data.player_states) {
@@ -1016,7 +1028,7 @@ game_core.prototype.client_update_physics = function() {
 game_core.prototype.client_update = function() {
 
 	//Clear the screen area
-	this.ctx.clearRect(0,0,720,480);
+	this.ctx.clearRect(0,0,this.world.width * game.viewport.res_mul, this.world.height * game.viewport.res_mul);
 
 	//draw help/information if required
 	this.client_draw_info();
@@ -1521,7 +1533,7 @@ var stage = function(game_instance) {
 
 	//add enemies by stage's own rule
 	this.add_enemies = function() {
-		this.game.add_enemy(25, {x: 30, y: 50});
+		this.game.add_enemy(2, {x: 4, y: 3});
 	};
 
 	this.clear_enemies = function() {
@@ -1566,7 +1578,7 @@ stage.prototype = Object.create(c_timer.prototype);
 p2.Body.prototype.draw = function() {
 	this.shapes.forEach(function(shape){
 		shape.draw({
-			x: this.position[0],
+			x: this.position[0], 
 			y: this.position[1]
 		});
 	}.bind(this));
@@ -1576,19 +1588,19 @@ p2.Circle.prototype.draw = function(pos) {
 	game.ctx.fillStyle = '#ffffff';
 
 	game.ctx.beginPath();
-	game.ctx.arc(pos.x, pos.y, this.radius, 0, 2 * Math.PI, false);
+	game.ctx.arc(pos.x * game.viewport.res_mul, pos.y * game.viewport.res_mul, this.radius * game.viewport.res_mul, 0, 2 * Math.PI, false);
 	game.ctx.fill();
 };
 
 p2.Box.prototype.draw = function(pos) {
 	game.ctx.fillStyle = '#ffffff';
 
-	game.ctx.fillRect(pos.x - this.width / 2.0, pos.y - this.height / 2.0, this.width, this.height);
+	game.ctx.fillRect((pos.x - this.width / 2.0) * game.viewport.res_mul, (pos.y - this.height / 2.0) * game.viewport.res_mul, this.width * game.viewport.res_mul, this.height * game.viewport.res_mul);
 };
 
 p2.Plane.prototype.draw = function(pos) {
 	game.ctx.fillStyle = '#eeeeee';
 
-	game.ctx.fillRect(0, pos.y, game.world.width, game.world.height - pos.y);
+	game.ctx.fillRect(0, pos.y * game.viewport.res_mul, game.world.width * game.viewport.res_mul, (game.world.height - pos.y) * game.viewport.res_mul);
 };
 
