@@ -6,10 +6,10 @@ var uuid = require('node-uuid');
 
 app.use(express.static('client'));
 
-app.set('views', './views');
+app.set('views', '../views');
 
 app.get('/', function(req, res){
-  res.sendfile('/index.html', { root:__dirname });
+  res.sendfile('views/index.html', { root:__dirname });
 });
 
 
@@ -22,7 +22,7 @@ http.listen(3000, function(){
   console.log('listening on *:3000');
 });
 
-var game_server = require('./game_server.js');
+var game_server = require('./scripts/game_server.js');
 
 io.on('connection', function(client){
 

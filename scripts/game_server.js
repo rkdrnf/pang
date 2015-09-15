@@ -20,17 +20,17 @@ setInterval(function(){
 }, 4);
 
 game_server.onMessage = function(client, message) {
-	var message_type = message['type'];
+	var message_type = message.type;
 
 	if (message_type == 'changeColor') {
-		this.onChangeColor(client, message['content']);
+		this.onChangeColor(client, message.content);
 	}
 };
 
 game_server.onInput = function(client, input) {
-	var input_commands = input['inputs'];
-	var input_time = input['time'];
-	var input_seq = input['seq'];
+	var input_commands = input.inputs;
+	var input_time = input.time;
+	var input_seq = input.seq;
 
 	if (client && client.game && client.game.gamecore) {
 		client.game.gamecore.handle_server_input(client, input_commands, input_time, input_seq);
@@ -70,10 +70,10 @@ game_server.disconnect_player = function(game_id, user_id) {
 		the_game.player_count--;
 	}
 
-	if (the_game.player_count == 0) {
+	if (the_game.player_count === 0) {
 		this.endGame(game_id);
 	}
-}
+};
 
 game_server.endGame = function(gameid, userid) {
 

@@ -1,1 +1,1 @@
-browserify game_core.js -o client_game.js
+browserify scripts\game_core.js -o scripts\client_game.js
