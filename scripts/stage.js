@@ -14,10 +14,18 @@ var c_stage = module.exports = function(game_instance) {
 		{ time: 7, pos: {x: 23, y: 4}, radius: 2.5},
 	];
 
+  this.item_spawn_infos = [
+    { time : 8, pos: {x: 4, y: 4}, radius: 0.5},
+    { time : 9, pos: {x: 5, y: 3}, radius: 0.5},
+    { time : 10, pos: {x: 7, y: 6}, radius: 0.5},
+    { time : 11, pos: {x: 9, y: 5}, radius: 0.5},
+  ];
+
 	this.timer_job = {
 		STAGE_END : 0,
-		SPAWN_ENEMY : 1
-	};
+		SPAWN_ENEMY : 1,
+    SPAWN_ITEM : 2
+  };
 
 	this.start = function() {
 		this.game.register_timer(this);
@@ -30,21 +38,28 @@ var c_stage = module.exports = function(game_instance) {
 	this.server_new_stage = function() {
 		this.time_left = this.stage_time;
 		this.game.add_timer(this.timer_id, this.timer_job.STAGE_END, this.time_left);
-		
+
 		this.enemy_spawn_infos.forEach(function(info) {
 			this.game.add_timer(this.timer_id, this.timer_job.SPAWN_ENEMY, info.time, info);
 		}.bind(this));
-		this.game.on_new_stage(this);
+
+    this.item_spawn_infos.forEach(function(info) {
+      this.game.add_timer(this.timer_id, this.timer_job.SPAWN_ITEM, info.time, info);
+    }.bind(this));
+
+    this.game.on_new_stage(this);
 	};
 
 	this.client_new_stage = function(t) {
 		this.time_left = t;
 		this.clear_enemies();
+    this.clear_items();
 	};
 
-	this.client_current_stage = function(t, enemies_info) {
+	this.client_current_stage = function(t, enemies_info, items_info) {
 		this.time_left = t;
 		this.game.receive_enemy_info(enemies_info);
+    this.game.receive_item_info(items_info);
 	};
 
 	//add enemies by stage's own rule
@@ -56,6 +71,13 @@ var c_stage = module.exports = function(game_instance) {
 		this.game.clear_enemies();
 	};
 
+  this.add_item = function(info) {
+    this.game.add_item(info.radius, info.pos);
+  };
+
+  this.clear_items = function() {
+    this.game.clear_items();
+  };
 
 	this.on_timer = function(job_id, info) {
 		if (job_id === this.timer_job.STAGE_END) {
@@ -67,6 +89,10 @@ var c_stage = module.exports = function(game_instance) {
 		if (job_id === this.timer_job.SPAWN_ENEMY) {
 			this.add_enemy(info);
 		}
+
+    if(job_id == this.timer_job.SPAWN_ITEM) {
+      this.add_item(info);
+    }
 	};
 
 	this.on_timer_tick = function(dt, t) {
