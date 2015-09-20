@@ -1,17 +1,17 @@
 var c_timer = require('./timer.js');
 
 var c_stage = module.exports = function(game_instance) {
-	this.stage_time = 30;
+	this.stage_time = 13;
 	this.time_left = this.stage_time;
 	this.game = game_instance;
 
 	this.enemy_spawn_infos = [
-		{ time: 2, pos: {x: 5, y: 3}, radius: 1.0 },
-		{ time: 3, pos: {x: 7, y: 6}, radius: 2.0 },
-		{ time: 4, pos: {x: 4, y: 4}, radius: 1.5},
-		{ time: 5, pos: {x: 15, y: 4}, radius: 3.0},
-		{ time: 6, pos: {x: 9, y: 4}, radius: 2.0},
-		{ time: 7, pos: {x: 23, y: 4}, radius: 2.5},
+		{ time: 2, pos: {x: 5, y: -5}, radius: 1.0 },
+		{ time: 3, pos: {x: 7, y: -5}, radius: 2.0 },
+		{ time: 4, pos: {x: 4, y: -5}, radius: 1.5},
+		{ time: 5, pos: {x: 15, y: -5}, radius: 3.0},
+		{ time: 6, pos: {x: 9, y: -5}, radius: 2.0},
+		{ time: 7, pos: {x: 23, y: -5}, radius: 2.5},
 	];
 
 	this.timer_job = {

@@ -39,9 +39,9 @@ var game_player = module.exports = function( game_instance, player_instance, is_
 		});
 
 		this.p_shape.collisionGroup = this.game.collision_group.PLAYER;
-		this.p_shape.collisionMask = this.game.collision_group.GROUND;
+		this.p_shape.collisionMask = this.game.collision_group.GROUND | this.game.collision_group.ENEMY;
 		this.p_body.addShape(this.p_shape);
-		this.game.physics_world.addBody(this.p_body);
+		this.p_body.game_object = this;
 	}
 
 
@@ -70,10 +70,32 @@ var game_player = module.exports = function( game_instance, player_instance, is_
 }; //game_player.constructor
 
 
+game_player.prototype.die = function() {
+	console.log('player is dead');
+	this.is_dead = true;
+	this.game.physics_world.removeBody(this.p_body);
+};
+
+game_player.prototype.revive = function() {
+	console.log('player revived');
+	this.is_dead = false;
+	this.p_body.position = [this.game.initial_position.x, this.game.initial_position.y];
+	this.p_body.velocity = [0, 0];
+	this.game.physics_world.addBody(this.p_body);
+};
+
 game_player.prototype.draw = function(){
 	if (!this.is_dead)
 	{
 		this.p_body.draw();
 	}
+};
+
+game_player.prototype.destroy = function() {
+	this.game.physics_world.removeBody(this.p_body);
+	this.p_body.game_object = null;
+	this.p_body = null;
+	this.p_shape = null;
+	this.game = null;
 };
 

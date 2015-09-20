@@ -43,10 +43,9 @@ var game_core = function(game_instance){
 		height : 20
 	};
 
+	this.init_physics_world();
 
-	this.physics_world = new p2.World({
-		gravity:[0, 9.87]
-	});
+
 
 	this.m2x = 16;
 	this.x2m = 0.0625;
@@ -59,18 +58,9 @@ var game_core = function(game_instance){
 
 	this.enemies = {};
 
-	this.groundBody = new p2.Body({
-		mass:0,
-		angle: Math.PI,
-		position: [0, this.world.height - 1]
-	});
-	var groundShape = new p2.Plane();
+	this.make_ground_and_wall();
 
-	groundShape.collisionGroup = this.collision_group.GROUND;
-	groundShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY;
-	this.groundBody.addShape(groundShape);
-	this.physics_world.addBody(this.groundBody);
-
+	
 	if (this.server) {
 		this.players = {};
 	} else {
@@ -116,6 +106,65 @@ var game_core = function(game_instance){
 		this.server_time = 0;
 		this.laststate = {};
 	}
+};
+
+game_core.prototype.init_physics_world = function() {
+	this.physics_world = new p2.World({
+		gravity:[0, 9.87]
+	});
+
+	this.physics_world.on('beginContact', function(data) {
+		var s_A = data.shapeA;
+		var s_B = data.shapeB;
+		if ((s_A.collisionGroup | s_B.collisionGroup) == (this.collision_group.PLAYER | this.collision_group.ENEMY)) {
+			var playerShape = s_A.collisionGroup == this.collision_group.PLAYER ? s_A : s_B;
+			var enemyShape = s_A.collisionGroup == this.collision_group.ENEMY ? s_A : s_B;
+
+			var player_obj = playerShape.body.game_object;
+			if (player_obj) {
+				player_obj.die();
+			}
+
+		}
+	}.bind(this));
+};
+
+game_core.prototype.make_ground_and_wall = function() {
+	this.groundBody = new p2.Body({
+		mass:0,
+		angle: Math.PI,
+		position: [0, this.world.height - 1]
+	});
+	var groundShape = new p2.Plane();
+
+	groundShape.collisionGroup = this.collision_group.GROUND;
+	groundShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY;
+	this.groundBody.addShape(groundShape);
+	this.physics_world.addBody(this.groundBody);
+
+	this.leftWall = new p2.Body({
+		mass:0,
+		angle: -Math.PI / 2.0,
+		position: [0, 0]
+	});
+	var leftWallShape = new p2.Plane();
+
+	leftWallShape.collisionGroup = this.collision_group.GROUND;
+	leftWallShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY;
+	this.leftWall.addShape(leftWallShape);
+	this.physics_world.addBody(this.leftWall);
+
+	this.rightWall = new p2.Body({
+		mass: 0,
+		angle: Math.PI / 2.0,
+		position: [this.world.width, 0]
+	});
+	var rightWallShape = new p2.Plane();
+
+	rightWallShape.collisionGroup = this.collision_group.GROUND;
+	rightWallShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY;
+	this.rightWall.addShape(rightWallShape);
+	this.physics_world.addBody(this.rightWall);
 };
 
 module.exports = global.game_core = game_core;
@@ -192,7 +241,6 @@ game_core.prototype.add_enemy = function(radius, pos) {
 
 game_core.prototype.client_spawn_enemy = function(info) {
 	console.log('On receive spawn enemy');
-	console.log(this);
 	this.enemies[info.id] = new c_enemy(this, info.id, info.radius, info.pos);
 };
 
@@ -203,7 +251,9 @@ game_core.prototype.receive_enemy_info = function(info) {
 };
 
 game_core.prototype.clear_enemies = function() {
-	Object.keys(this.enemies).forEach(function(enemy) {
+	console.log('Clear enemies');
+	this.for_each_enemy(function(enemy) {
+		enemy.destroy();
 		delete this.enemies[enemy.id];
 	}.bind(this));
 };
@@ -220,7 +270,6 @@ game_core.prototype.new_player = function(player) {
 	var existing_infos = [];
 
 	this.for_each_player(function(gp) {
-		console.log(existing_infos);
 		existing_infos.push(gp.get_info());
 
 		if (gp.id == player.user_id) {
@@ -269,9 +318,7 @@ game_core.prototype.create_stage = function() {
 game_core.prototype.on_new_stage = function(stage) {
 
 	this.for_each_player(function(player) {
-		player.p_body.position = this.p_vec2(this.initial_position);
-		player.p_body.velocity = [0, 0];
-		player.is_dead = false;
+		player.revive();
 	}.bind(this));
 
 	this.broadcast('new_stage', {
@@ -280,6 +327,7 @@ game_core.prototype.on_new_stage = function(stage) {
 };
 
 game_core.prototype.on_stage_end = function(stage) {
+	this.clear_enemies();
 };
 
 game_core.prototype.client_on_new_stage = function(data) {
@@ -468,8 +516,8 @@ game_core.prototype.update_physics = function() {
 	if ('undefined' != typeof(global.GLOBAL) && Object.keys(this.players).length > 0 && this.physics_time < 2) {
 		var player = this.players[Object.keys(this.players)[0]];
 		this.physics_time += this._pdt;
-		console.log('up time: ' + this.physics_time + '_pdt: ' + this._pdt);
-		console.log('p_pos: ' + player.pos.y + 'p_p_pos' + player.p_body.position[1] + 'p_vel: ' + player.p_body.velocity[1] + 'p_force: ' + player.p_body.force[1]);
+		//console.log('up time: ' + this.physics_time + '_pdt: ' + this._pdt);
+		//console.log('p_pos: ' + player.pos.y + 'p_p_pos' + player.p_body.position[1] + 'p_vel: ' + player.p_body.velocity[1] + 'p_force: ' + player.p_body.force[1]);
 	}
 
 }; //game_core.prototype.update_physics
@@ -772,15 +820,21 @@ game_core.prototype.client_process_net_updates = function() {
 
 		//state update
 		for(var id in this.players) {
-			if (id == 'self') continue;
+			if (id === 'self') continue;
 			if (!latest_server_data.player_states[id]) continue;
 
-			this.players[id].is_dead = latest_server_data.player_states[id].dead;
+			if (this.players[id].is_dead !== latest_server_data.player_states[id].dead) {
+				if (latest_server_data.player_states[id].dead) {
+					this.players[id].die();
+				} else {
+					this.players[id].revive();
+				}
+			}
 		}
 
 		(function() {
 			for(var id in this.players) {
-				if (id == this.players.self.id || id == 'self') continue;
+				if (id === this.players.self.id || id === 'self') continue;
 				if (!latest_server_data.player_states[id]) continue;
 				if (!target.player_states[id] || !previous.player_states[id]) continue;
 
@@ -876,7 +930,6 @@ game_core.prototype.client_onserverupdate_recieved = function(data){
 	//information to interpolate with so it misses positions, and packet loss destroys this approach
 	//even more so. See 'the bouncing ball problem' on Wikipedia.
 
-	console.log(data);
 
 	if(this.naive_approach) {
 		for(var id in data.player_states) {
@@ -1134,13 +1187,18 @@ game_core.prototype.client_on_receive_player_info = function(data) {
 	console.log('On receive player info');
 	data.players.forEach(function(p_info, index, arr) {
 		var player = new game_player(this, undefined, false);
+		if (p_info.is_dead) {
+			player.die();
+		} else {
+			player.revive();
+		}
+
 		player.state = 'connected';
 		player.online = 'true';
 		player.id = p_info.id;
 		this.players[p_info.id] = player;
 		this.players[p_info.id].pos = p_info.pos;
 		this.players[p_info.id].color = '#ffffff';
-		this.players[p_info.id].is_dead = p_info.is_dead;
 		this.ghosts[p_info.id] = {
 			server_pos: new game_player(this, undefined, true),
 			client_pos: new game_player(this, undefined, true)
@@ -1161,6 +1219,7 @@ game_core.prototype.client_on_player_disconnected = function(data) {
 	var player = this.players[data.id];
 	if (player)
 		{
+			player.destroy();
 			delete this.players[data.id];
 		}
 };
@@ -1238,7 +1297,6 @@ game_core.prototype.client_onhostgame = function(data) {
 
 game_core.prototype.client_onconnected = function(data) {
 
-	console.log('hi');
 	//The server responded that we are now in a game,
 	//this lets us store the information about ourselves and set the colors
 	//to show we are now ready to be playing.
