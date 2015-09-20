@@ -1,8 +1,9 @@
 var p2 = require('p2');
 
-var c_item = function(game, id, radius, pos) {
+var c_item = function(game, id, radius, pos, type) {
   this.game = game;
   this.id = id;
+  this.type = type;
 
   this.pos = {x:30, y:50};
   if (pos) {
@@ -19,8 +20,7 @@ var c_item = function(game, id, radius, pos) {
   });
 
   console.log(game);
-
-  this.p_shape.collisionGroup = this.game.collision_group.ITEM.;
+  this.p_shape.collisionGroup = this.game.collision_group.ITEM;
   this.p_shape.collisionMask = this.game.collision_group.GROUND || this.game.collision_group.PLAYER;
 
   this.p_body.addShape(this.p_shape);
@@ -31,7 +31,8 @@ c_item.prototype.get_info = function() {
   return {
     id: this.id,
     pos: this.pos,
-    radius: this.p_shape.radius
+    radius: this.p_shape.radius,
+    type: this.type
   };
 };
 

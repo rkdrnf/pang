@@ -58,6 +58,16 @@ var game_core = function(game_instance){
     ITEM: Math.pow(2,3)
 	};
 
+  this.item_effect = {
+    WEAPON: Math.pow(2, 0),
+    ETC: Math.pow(2, 1)
+  };
+
+  this.weapon_group = {
+    REVOLVER: Math.pow(2, 0),
+    BAMBOOSPEAR: Math.pow(2, 1)
+  };
+
   // create objects in game.
 	this.enemies = {};
   this.items = {};
@@ -213,9 +223,9 @@ game_core.prototype.clear_enemies = function() {
 };
 
 // methods deal with add, spawn, clear items
-game_core.prototype.add_item = function(radius, pos) {
+game_core.prototype.add_item = function(radius, pos, type) {
   var item_id = uuid.v1();
-  var item = new c_item(this, item_id, radius, pos);
+  var item = new c_item(this, item_id, radius, pos, type);
   this.items[item_id] = item;
 
   this.broadcast('spawn_item', item.get_info());
@@ -224,7 +234,7 @@ game_core.prototype.add_item = function(radius, pos) {
 game_core.prototype.client_spawn_item = function(info) {
   console.log('On receive spawn item');
   console.log(this);
-  this.items[info.id] = new c_item(this, info.id, info.radius, info.pos);
+  this.items[info.id] = new c_item(this, info.id, info.radius, info.pos, info.type);
 };
 
 game_core.prototype.receive_item_info = function(info) {
