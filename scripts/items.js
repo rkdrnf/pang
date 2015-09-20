@@ -20,8 +20,8 @@ var c_item = function(game, id, radius, pos) {
 
   console.log(game);
 
-  this.p_shape.collisionGroup = this.game.collision_group.ENEMY;
-  this.p_shape.collisionMask = this.game.collision_group.GROUND;
+  this.p_shape.collisionGroup = this.game.collision_group.ITEM.;
+  this.p_shape.collisionMask = this.game.collision_group.GROUND || this.game.collision_group.PLAYER;
 
   this.p_body.addShape(this.p_shape);
   this.game.physics_world.addBody(this.p_body);
