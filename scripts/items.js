@@ -40,4 +40,12 @@ c_item.prototype.draw = function() {
   this.p_body.draw();
 };
 
+c_item.prototype.destroy = function() {
+  this.game.physics_world.removeBody(this.p_body);
+  this.p_body.game_object = null;
+  this.p_shape = null;
+  this.p_body = null;
+  this.game = null;
+};
+
 module.exports = c_item;

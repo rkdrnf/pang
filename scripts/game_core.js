@@ -305,7 +305,8 @@ game_core.prototype.receive_item_info = function(info) {
 };
 
 game_core.prototype.clear_items = function() {
-  Object.keys(this.items).forEach(function(item) {
+  this.for_each_item(function(item) {
+    item.destroy();
     delete this.items[item.id];
   }.bind(this));
 };
@@ -384,6 +385,7 @@ game_core.prototype.on_new_stage = function(stage) {
 
 game_core.prototype.on_stage_end = function(stage) {
 	this.clear_enemies();
+  this.clear_items();
 };
 
 game_core.prototype.client_on_new_stage = function(data) {
