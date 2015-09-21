@@ -49,10 +49,8 @@ width : 30,
 		height : 20
 	};
 
+	this.init_physics_world();
 
-	this.physics_world = new p2.World({
-gravity:[0, 9.87]
-});
 
 this.m2x = 16;
 this.x2m = 0.0625;
@@ -64,29 +62,18 @@ PLAYER: Math.pow(2,0),
 		BULLET: Math.pow(2,4)
 };
 
-this.enemies = {};
+	this.make_ground_and_wall();
 
-this.groundBody = new p2.Body({
-mass:0,
-angle: Math.PI,
-position: [0, this.world.height - 1]
-});
-var groundShape = new p2.Plane();
-
-groundShape.collisionGroup = this.collision_group.GROUND;
-groundShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY;
-this.groundBody.addShape(groundShape);
-this.physics_world.addBody(this.groundBody);
-
-if (this.server) {
-	this.players = {};
-	this.projectiles = {};
-} else {
-	this.players = {};
-	this.players.self = {};
-	this.ghosts = {};
-	this.projectiles = {};
-}
+	
+	if (this.server) {
+		this.players = {};
+		this.projectiles = {};
+	} else {
+		this.players = {};
+		this.players.self = {};
+		this.ghosts = {};
+		this.projectiles = {};
+	}
 
 this.timers = {};
 
@@ -125,6 +112,65 @@ if (!this.server) {
 	this.server_time = 0;
 	this.laststate = {};
 }
+};
+
+game_core.prototype.init_physics_world = function() {
+	this.physics_world = new p2.World({
+		gravity:[0, 9.87]
+	});
+
+	this.physics_world.on('beginContact', function(data) {
+		var s_A = data.shapeA;
+		var s_B = data.shapeB;
+		if ((s_A.collisionGroup | s_B.collisionGroup) == (this.collision_group.PLAYER | this.collision_group.ENEMY)) {
+			var playerShape = s_A.collisionGroup == this.collision_group.PLAYER ? s_A : s_B;
+			var enemyShape = s_A.collisionGroup == this.collision_group.ENEMY ? s_A : s_B;
+
+			var player_obj = playerShape.body.game_object;
+			if (player_obj) {
+				player_obj.die();
+			}
+
+		}
+	}.bind(this));
+};
+
+game_core.prototype.make_ground_and_wall = function() {
+	this.groundBody = new p2.Body({
+		mass:0,
+		angle: Math.PI,
+		position: [0, this.world.height - 1]
+	});
+	var groundShape = new p2.Plane();
+
+	groundShape.collisionGroup = this.collision_group.GROUND;
+	groundShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY;
+	this.groundBody.addShape(groundShape);
+	this.physics_world.addBody(this.groundBody);
+
+	this.leftWall = new p2.Body({
+		mass:0,
+		angle: -Math.PI / 2.0,
+		position: [0, 0]
+	});
+	var leftWallShape = new p2.Plane();
+
+	leftWallShape.collisionGroup = this.collision_group.GROUND;
+	leftWallShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY;
+	this.leftWall.addShape(leftWallShape);
+	this.physics_world.addBody(this.leftWall);
+
+	this.rightWall = new p2.Body({
+		mass: 0,
+		angle: Math.PI / 2.0,
+		position: [this.world.width, 0]
+	});
+	var rightWallShape = new p2.Plane();
+
+	rightWallShape.collisionGroup = this.collision_group.GROUND;
+	rightWallShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY;
+	this.rightWall.addShape(rightWallShape);
+	this.physics_world.addBody(this.rightWall);
 };
 
 module.exports = global.game_core = game_core;
@@ -225,9 +271,11 @@ game_core.prototype.receive_enemy_info = function(info) {
 };
 
 game_core.prototype.clear_enemies = function() {
-	Object.keys(this.enemies).forEach(function(enemy) {
-			delete this.enemies[enemy.id];
-			}.bind(this));
+	console.log('Clear enemies');
+	this.for_each_enemy(function(enemy) {
+		enemy.destroy();
+		delete this.enemies[enemy.id];
+	}.bind(this));
 };
 
 
@@ -243,9 +291,7 @@ game_core.prototype.new_player = function(player) {
 	var existing_infos = [];
 
 	this.for_each_player(function(gp) {
-			console.log(existing_infos);
-			existing_infos.push(gp.get_info());
-
+	existing_infos.push(gp.get_info());
 			if (gp.id == player.user_id) {
 			return;
 			}
@@ -292,17 +338,15 @@ game_core.prototype.create_stage = function() {
 game_core.prototype.on_new_stage = function(stage) {
 
 	this.for_each_player(function(player) {
-			player.p_body.position = this.p_vec2(this.initial_position);
-			player.p_body.velocity = [0, 0];
-			player.is_dead = false;
-			}.bind(this));
-
+		player.revive();
+	}.bind(this));
 	this.broadcast('new_stage', {
 time_left: stage.time_left
 });
 };
 
 game_core.prototype.on_stage_end = function(stage) {
+	this.clear_enemies();
 };
 
 game_core.prototype.client_on_new_stage = function(data) {
@@ -805,37 +849,43 @@ game_core.prototype.client_process_net_updates = function() {
 
 		//state update
 		for(var id in this.players) {
-			if (id == 'self') continue;
+			if (id === 'self') continue;
 			if (!latest_server_data.player_states[id]) continue;
 
-			this.players[id].is_dead = latest_server_data.player_states[id].dead;
+			if (this.players[id].is_dead !== latest_server_data.player_states[id].dead) {
+				if (latest_server_data.player_states[id].dead) {
+					this.players[id].die();
+				} else {
+					this.players[id].revive();
+				}
+			}
 		}
 
 		(function() {
-		 for(var id in this.players) {
-		 if (id == this.players.self.id || id == 'self') continue;
-		 if (!latest_server_data.player_states[id]) continue;
-		 if (!target.player_states[id] || !previous.player_states[id]) continue;
+			for(var id in this.players) {
+				if (id === this.players.self.id || id === 'self') continue;
+				if (!latest_server_data.player_states[id]) continue;
+				if (!target.player_states[id] || !previous.player_states[id]) continue;
 
-		 //These are the exact server positions from this tick, but only for the ghost
-		 var other_server_pos = latest_server_data.player_states[id].pos;
-		 //The other players positions in this timeline, behind us and in front of us
-		 var other_target_pos = target.player_states[id].pos;
-		 var other_past_pos = previous.player_states[id].pos;
+				//These are the exact server positions from this tick, but only for the ghost
+				var other_server_pos = latest_server_data.player_states[id].pos;
+				//The other players positions in this timeline, behind us and in front of us
+				var other_target_pos = target.player_states[id].pos;
+				var other_past_pos = previous.player_states[id].pos;
 
-		 //update the dest block, this is a simple lerp
-		 //to the target from the previous point in the server_updates buffer
-		 this.ghosts[id].server_pos.pos = this.pos(other_server_pos);
-		 this.ghosts[id].client_pos.pos = this.v_lerp(other_past_pos, other_target_pos, time_point);
+				//update the dest block, this is a simple lerp
+				//to the target from the previous point in the server_updates buffer
+				this.ghosts[id].server_pos.pos = this.pos(other_server_pos);
+				this.ghosts[id].client_pos.pos = this.v_lerp(other_past_pos, other_target_pos, time_point);
 
 
-		 var other = this.players[id];
-		 if (this.client_smoothing) {
-		 other.p_body.position = this.p_vec2(this.v_lerp(other.pos, this.ghosts[id].client_pos.pos, this._pdt*this.client_smooth));
-		 } else {
-			 other.p_body.position = this.p_vec2(this.pos(this.ghosts[id].client_pos.pos));
-		 }
-		 }
+				var other = this.players[id];
+				if (this.client_smoothing) {
+					other.p_body.position = this.p_vec2(this.v_lerp(other.pos, this.ghosts[id].client_pos.pos, this._pdt*this.client_smooth));
+				} else {
+					other.p_body.position = this.p_vec2(this.pos(this.ghosts[id].client_pos.pos));
+				}
+			}
 		})();
 
 
@@ -1168,36 +1218,42 @@ game_core.prototype.client_create_debug_gui = function() {
 game_core.prototype.client_on_receive_player_info = function(data) {
 	console.log('On receive player info');
 	data.players.forEach(function(p_info, index, arr) {
-			var player = new game_player(this, undefined, false);
-			player.state = 'connected';
-			player.online = 'true';
-			player.id = p_info.id;
-			this.players[p_info.id] = player;
-			this.players[p_info.id].pos = p_info.pos;
-			this.players[p_info.id].color = '#ffffff';
-			this.players[p_info.id].is_dead = p_info.is_dead;
-			this.ghosts[p_info.id] = {
-server_pos: new game_player(this, undefined, true),
-client_pos: new game_player(this, undefined, true)
-};
+		var player = new game_player(this, undefined, false);
+		if (p_info.is_dead) {
+			player.die();
+		} else {
+			player.revive();
+		}
 
-if(this.players.self.id == p_info.id) {
-var self = this.players.self;
+		player.state = 'connected';
+		player.online = 'true';
+		player.id = p_info.id;
+		this.players[p_info.id] = player;
+		this.players[p_info.id].pos = p_info.pos;
+		this.players[p_info.id].color = '#ffffff';
+		this.ghosts[p_info.id] = {
+			server_pos: new game_player(this, undefined, true),
+			client_pos: new game_player(this, undefined, true)
+		};
 
-this.players.self = player;
-player.color = '#cc0000';
-player.id = self.id;
-player.info_color = '#cc0000';
-}
-}.bind(this));
+		if(this.players.self.id == p_info.id) {
+			var self = this.players.self;
+
+			this.players.self = player;
+			player.color = '#cc0000';
+			player.id = self.id;
+			player.info_color = '#cc0000';
+		}
+	}.bind(this));
 };
 
 game_core.prototype.client_on_player_disconnected = function(data) {
 	var player = this.players[data.id];
 	if (player)
-	{
-		delete this.players[data.id];
-	}
+		{
+			player.destroy();
+			delete this.players[data.id];
+		}
 };
 
 game_core.prototype.client_reset_positions = function() {
@@ -1273,7 +1329,6 @@ game_core.prototype.client_onhostgame = function(data) {
 
 game_core.prototype.client_onconnected = function(data) {
 
-	console.log('hi');
 	//The server responded that we are now in a game,
 	//this lets us store the information about ourselves and set the colors
 	//to show we are now ready to be playing.
