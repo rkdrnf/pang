@@ -1,3 +1,6 @@
+var c_bullet = require('./bullet.js');
+var uuid = require('node-uuid');
+
 var p2 = require('p2');
 
 var game_player = module.exports = function( game_instance, player_instance, is_ghost ) {
@@ -19,6 +22,10 @@ var game_player = module.exports = function( game_instance, player_instance, is_
 	this.state_time = new Date().getTime();
 
 	this.is_dead = true;
+
+	this.weapon = c_bullet;
+	this.fire_timer = 0;
+	this.fire_rate = 2;
 
 	this.width = 1;
 	this.height = 1;
@@ -67,8 +74,27 @@ var game_player = module.exports = function( game_instance, player_instance, is_
 		};
 	};
 
+	this.game.register_timer(this);
+
 }; //game_player.constructor
 
+game_player.prototype.on_timer_tick = function(dt) {
+	this.fire_timer -= dt;
+};
+
+game_player.prototype.fire = function(){
+	this.weapon.fire();
+}; //game_player.fire
+
+game_player.prototype.fire_weapon = function() {
+	if (this.fire_timer < 0) {
+		var projectile = new this.weapon(uuid.v1(), this);
+		this.fire_timer = this.fire_rate;
+		return projectile;
+	} else {
+		return null;
+	}
+};
 
 game_player.prototype.die = function() {
 	console.log('player is dead');
