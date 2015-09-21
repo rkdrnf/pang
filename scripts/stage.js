@@ -6,19 +6,19 @@ var c_stage = module.exports = function(game_instance) {
 	this.game = game_instance;
 
 	this.enemy_spawn_infos = [
-		{ time: 2, pos: {x: 5, y: -5}, radius: 1.0 },
+		/*{ time: 2, pos: {x: 5, y: -5}, radius: 1.0 },
 		{ time: 3, pos: {x: 7, y: -5}, radius: 2.0 },
 		{ time: 4, pos: {x: 4, y: -5}, radius: 1.5},
 		{ time: 5, pos: {x: 15, y: -5}, radius: 3.0},
 		{ time: 6, pos: {x: 9, y: -5}, radius: 2.0},
-		{ time: 7, pos: {x: 23, y: -5}, radius: 2.5},
+		{ time: 7, pos: {x: 23, y: -5}, radius: 2.5},*/
 	];
 
   this.item_spawn_infos = [
-    { time : 8, pos: {x: 4, y: 4}, radius: 0.5},
-    { time : 9, pos: {x: 5, y: 3}, radius: 0.5},
-    { time : 10, pos: {x: 7, y: 6}, radius: 0.5},
-    { time : 11, pos: {x: 9, y: 5}, radius: 0.5},
+    { time : 2, pos: {x: 4, y: 4}, radius: 0.5, type: this.game.item_effect.WEAPON},
+    { time : 3, pos: {x: 5, y: 3}, radius: 0.5, type: this.game.item_effect.VIAGRA},
+    { time : 4, pos: {x: 7, y: 6}, radius: 0.5, type: this.game.item_effect.WEAPON},
+    { time : 5, pos: {x: 9, y: 5}, radius: 0.5, type: this.game.item_effect.VIAGRA},
   ];
 
 	this.timer_job = {

@@ -39,7 +39,7 @@ var game_player = module.exports = function( game_instance, player_instance, is_
 		});
 
 		this.p_shape.collisionGroup = this.game.collision_group.PLAYER;
-		this.p_shape.collisionMask = this.game.collision_group.GROUND | this.game.collision_group.ENEMY;
+		this.p_shape.collisionMask = this.game.collision_group.GROUND | this.game.collision_group.ENEMY | this.game.collision_group.ITEM;
 		this.p_body.addShape(this.p_shape);
 		this.p_body.game_object = this;
 	}
@@ -99,3 +99,12 @@ game_player.prototype.destroy = function() {
 	this.game = null;
 };
 
+game_player.prototype.applyitem = function(type) {
+  if (type == this.game.item_effect.WEAPON) {
+    this.color = 'rgba(0,0,255,0.1)';
+    this.info_color = 'rgba(255,255,255,0.1)';
+  }else {
+    this.color = 'rgba(255,0,0,0.1)';
+    this.info_color = 'rgba(255,255,255,0.1)';
+	}
+};

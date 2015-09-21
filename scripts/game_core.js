@@ -45,8 +45,6 @@ var game_core = function(game_instance){
 
 	this.init_physics_world();
 
-
-
 	this.m2x = 16;
 	this.x2m = 0.0625;
 
@@ -59,7 +57,7 @@ var game_core = function(game_instance){
 
   this.item_effect = {
     WEAPON: Math.pow(2, 0),
-    ETC: Math.pow(2, 1)
+    VIAGRA: Math.pow(2, 1)
   };
 
   this.weapon_group = {
@@ -148,7 +146,19 @@ game_core.prototype.init_physics_world = function() {
 			if (player_obj) {
 				player_obj.die();
 			}
+		}
+    if ((s_A.collisionGroup | s_B.collisionGroup) == (this.collision_group.PLAYER | this.collision_group.ITEM)) {
+			var playerShape = s_A.collisionGroup == this.collision_group.PLAYER ? s_A : s_B;
+			var itemShape = s_A.collisionGroup == this.collision_group.ITEM ? s_A : s_B;
 
+			var player_obj = playerShape.body.game_object;
+      var item_obj = itemShape.body.item_object;
+
+			if (player_obj && item_obj) {
+				player_obj.applyitem(item_obj.type);
+        item_obj.destroy();
+        delete this.items[item_obj.id];
+			}
 		}
 	}.bind(this));
 };

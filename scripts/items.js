@@ -19,11 +19,11 @@ var c_item = function(game, id, radius, pos, type) {
     radius: radius? radius : 10
   });
 
-  console.log(game);
   this.p_shape.collisionGroup = this.game.collision_group.ITEM;
-  this.p_shape.collisionMask = this.game.collision_group.GROUND || this.game.collision_group.PLAYER;
+  this.p_shape.collisionMask = this.game.collision_group.GROUND | this.game.collision_group.PLAYER;
 
   this.p_body.addShape(this.p_shape);
+  this.p_body.item_object = this;
   this.game.physics_world.addBody(this.p_body);
 };
 
