@@ -25,7 +25,10 @@ var c_enemy = module.exports = function(game, id, radius, pos ) {
 
 	this.p_body.addShape(this.p_shape);
 	this.p_body.game_object = this;
-	this.game.physics_world.addBody(this.p_body);
+
+	if (this.game.server) {
+		this.game.physics_world.addBody(this.p_body);
+	}
 };
 
 c_enemy.prototype.get_info = function() {
