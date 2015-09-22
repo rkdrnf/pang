@@ -1,5 +1,6 @@
 var game_server = module.exports = { games: {}, game_count: 0 };
 var uuid = require('node-uuid');
+var c_input = require('./input.js');
 
 
 global.window = global.document = global;
@@ -33,7 +34,7 @@ game_server.onInput = function(client, input) {
 	var input_seq = input.seq;
 
 	if (client && client.game && client.game.gamecore) {
-		client.game.gamecore.handle_server_input(client, input_commands, input_time, input_seq);
+		client.game.gamecore.handle_server_input(client, c_input.fromValue(input_commands), input_time, input_seq);
 	}
 };
 

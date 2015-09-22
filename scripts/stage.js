@@ -96,7 +96,7 @@ var c_stage = module.exports = function(game_instance) {
 	};
 
 	this.on_timer_tick = function(dt, t) {
-		this.time_left -= dt;
+		this.time_left -= dt / 1000.0;
 	};
 };
 

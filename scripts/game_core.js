@@ -7,6 +7,7 @@ var c_timer = require('./timer.js');
 var c_stage = require('./stage.js');
 var c_projectile = require('./projectile.js');
 var c_bullet = require('./bullet.js');
+var c_input = require('./input.js');
 
 
 var frame_time = 60/1000;
@@ -230,7 +231,7 @@ game_core.prototype.add_timer = function(timer_id, job_id, time, info) {
 
 	this.timers[timer_id].job_queue.push({
 job_id: job_id,
-time: time,
+time: time * 1000.0,
 info: info
 });
 
@@ -474,11 +475,16 @@ game.ctx.fillText(this.state, this.pos.x+10, this.pos.y + 4);
 
 //Main update loop
 game_core.prototype.update = function(t) {
+	//unit of dt is millisecond
+	if (t < 1e12) { // if high resolution time. t: [chrome] window.performance.now()
+		this.dt = this.lastframetime ? (t - this.lastframetime).fixed(3) : 16.667;
+	} else { // low resolution time. t: Date.now()
+		this.dt = this.lastframetime ? (t - this.lastframetime).fixed(3) : 16.667;
+	}
 
 	//Work out the delta time
-	this.dt = this.lastframetime ? ( (t - this.lastframetime)/1000.0).fixed() : 0.016;
 
-	//Store the last frame time
+	//Store the last frame time. millisecond
 	this.lastframetime = t;
 
 	//Update the game specifics
@@ -532,43 +538,31 @@ game_core.prototype.process_input = function( player ) {
 
 	//It's possible to have recieved multiple inputs by now,
 	//so we process each one
-	var x_dir = 0;
-	var y_dir = 0;
+	var movement_vector = {
+		x: 0,
+		y: 0
+	};
 	var ic = player.inputs.length;
 	if(ic) {
 		for(var j = 0; j < ic; ++j) {
 			//don't process ones we already have simulated locally
-			if(player.inputs[j].seq <= player.last_input_seq) continue;
+			if(player.inputs[j].seq < player.last_input_seq) continue;
 
 			var input = player.inputs[j].inputs;
-			var c = input.length;
-			for(var i = 0; i < c; ++i) {
-				var key = input[i];
-				if(key == 'l') {
-					x_dir -= 1;
-				}
-				if(key == 'r') {
-					x_dir += 1;
-				}
-				if(key == 'd') {
-					y_dir += 1;
-				}
-				if(key == 'u') {
-					y_dir -= 1;
-				}
-				if(key == 'x') {
-					if (this.server) {
-						this.fire_weapon(player);
-					}
-				}
 
-			} //for all input values
+			movement_vector = input.movement_vector(); 
 
+			if (input.fire) {
+				if (this.server) {
+					this.fire_weapon(player);
+				}
+			}
 		} //for each input command
 	} //if we have inputs
 
 	//we have a direction vector now, so apply the same physics as the client
-	var resulting_vector = this.physics_movement_vector_from_direction(x_dir,y_dir);
+	var resulting_vector = this.physics_movement_vector_from_direction(movement_vector);
+	
 	if(player.inputs.length) {
 		//we can now clear the array since these have been processed
 
@@ -581,12 +575,12 @@ game_core.prototype.process_input = function( player ) {
 
 }; //game_core.process_input
 
-game_core.prototype.physics_movement_vector_from_direction = function(x,y) {
+game_core.prototype.physics_movement_vector_from_direction = function(movement_vector) {
 
 	//Must be fixed step, at physics sync speed.
 	return {
-x : (x * (this.playerspeed * 0.015)).fixed(3),
-  y : (y * (this.playerspeed * 0.015)).fixed(3)
+		x : (movement_vector.x * (this.playerspeed * 0.015)).fixed(3),
+		y : (movement_vector.y * (this.playerspeed * 0.015)).fixed(3)
 	};
 
 }; //game_core.physics_movement_vector_from_direction
@@ -597,6 +591,7 @@ game_core.prototype.update_physics = function() {
 	if(this.server) {
 		this.server_update_physics();
 	} else {
+		console.log('client physics update');
 		this.client_update_physics();
 
 	}
@@ -718,6 +713,7 @@ game_core.prototype.handle_server_input = function(client, input, input_time, in
 
 	//Store the input on the player instance for processing in the physics loop
 	player.inputs.push({inputs: input, time: input_time, seq: input_seq});
+	player.current_input = input;
 }; //game_core.handle_server_input
 
 
@@ -731,7 +727,7 @@ game_core.prototype.handle_server_input = function(client, input, input_time, in
 */
 
 game_core.prototype.client_handle_input = function(){
-
+	if (!(this.players.self && this.players.self.state === 'connected')) return;
 	//if(this.lit > this.local_time) return;
 	//this.lit = this.local_time+0.5; //one second delay
 
@@ -739,80 +735,61 @@ game_core.prototype.client_handle_input = function(){
 	//It also sends the input information to the server immediately
 	//as it is pressed. It also tags each input with a sequence number.
 
-	var x_dir = 0;
-	var y_dir = 0;
-	var input = [];
 	this.client_has_input = false;
+
+	var new_input = new c_input(false, false, false, false, false);
 
 	if( this.keyboard.pressed('A') ||
 			this.keyboard.pressed('left')) {
-
-		x_dir = -1;
-		input.push('l');
-
+		new_input.left = true
 	} //left
 
 	if( this.keyboard.pressed('D') ||
 			this.keyboard.pressed('right')) {
-
-		x_dir = 1;
-		input.push('r');
-
+		new_input.right = true;
 	} //right
 
 	if( this.keyboard.pressed('S') ||
 			this.keyboard.pressed('down')) {
-
-		y_dir = 1;
-		input.push('d');
-
+		new_input.down = true;
 	} //down
 
 	if( this.keyboard.pressed('W') ||
 			this.keyboard.pressed('up')) {
-
-		y_dir = -1;
-		input.push('u');
+		new_input.up = true; 
 	} //up
 
 	if( this.keyboard.pressed('X')) {
-
-		input.push('x');
-
+		new_input.fire = true;
 	} //shoot
 
-
-	if(input.length) {
+	if (new_input !== this.current_input) {
+		console.log('client input changed. time: ' + this.local_time.fixed(3));
 
 		//Update what sequence we are on now
 		this.input_seq += 1;
 
+		this.current_input = new_input;
+
 		//Store the input state as a snapshot of what happened.
 		this.players.self.inputs.push({
-inputs : input,
-time : this.local_time.fixed(3),
-seq : this.input_seq
-});
+			inputs : new_input,
+			time : this.local_time.fixed(3),
+			seq : this.input_seq
+		});
 
-//Send the packet of information to the server.
-//The input packets are labelled with an 'i' in front.
-var server_packet = {
-inputs: input,
-		t: this.local_time.toFixed(3),
-		seq: this.input_seq
-};
+		var server_packet = {
+			inputs: new_input.valueOf(),
+			t: this.local_time.toFixed(3),
+			seq: this.input_seq
+		};
 
-this.socket.emit('client_input', server_packet);
+		//Send the packet of information to the server.
+		//The input packets are labelled with an 'i' in front.
+		this.socket.emit('client_input', server_packet);
 
-//Return the direction if needed
-return this.physics_movement_vector_from_direction( x_dir, y_dir );
-
-} else {
-
-	return {x:0,y:0};
-
-}
-
+		//Return the direction if needed
+	}
 }; //game_core.client_handle_input
 
 game_core.prototype.client_process_net_prediction_correction = function() {
@@ -820,15 +797,16 @@ game_core.prototype.client_process_net_prediction_correction = function() {
 	//No updates...
 	if(!this.server_updates.length) return;
 
+	var self = this.players.self;
 	//The most recent server update
 	var latest_server_data = this.server_updates[this.server_updates.length-1];
 
-	var my_server_state = latest_server_data.player_states[this.players.self.id];
+	var my_server_state = latest_server_data.player_states[self.id];
 	//Our latest server position
 	var my_server_pos = my_server_state.pos;
 
 	//Update the debug server position block
-	this.ghosts[this.players.self.id].server_pos.pos = this.pos(my_server_pos);
+	this.ghosts[self.id].server_pos.pos = this.pos(my_server_pos);
 
 	//here we handle our local input prediction ,
 	//by correcting it with the server and reconciling its differences
@@ -838,8 +816,8 @@ game_core.prototype.client_process_net_prediction_correction = function() {
 		//The last input sequence index in my local input list
 		var lastinputseq_index = -1;
 		//Find this input in the list, and store the index
-		for(var i = 0; i < this.players.self.inputs.length; ++i) {
-			if(this.players.self.inputs[i].seq == my_last_input_on_server) {
+		for(var i = 0; i < self.inputs.length; ++i) {
+			if(self.inputs[i].seq == my_last_input_on_server) {
 				lastinputseq_index = i;
 				break;
 			}
@@ -849,14 +827,17 @@ game_core.prototype.client_process_net_prediction_correction = function() {
 		if(lastinputseq_index != -1) {
 			//so we have now gotten an acknowledgement from the server that our inputs here have been accepted
 			//and that we can predict from this known position instead
+			
 
 			//remove the rest of the inputs we have confirmed on the server
 			var number_to_clear = Math.abs(lastinputseq_index - (-1));
-			this.players.self.inputs.splice(0, number_to_clear);
+			self.inputs.splice(0, number_to_clear);
+
+			console.log('on correction. remain inputs: ' + self.inputs.length + '  prev x_pos: ' + self.p_body.position[0].fixed(4) + '  corrected pos: ' + my_server_pos.x.fixed(4));
 			//The player is now located at the new server position, authoritive server
-			this.players.self.p_body.position = this.p_vec2(my_server_pos);
-			this.players.self.cur_state.pos = this.pos(my_server_pos);
-			this.players.self.last_input_seq = lastinputseq_index;
+			self.p_body.position = this.p_vec2(my_server_pos);
+			self.cur_state.pos = this.pos(my_server_pos);
+			self.last_input_seq = lastinputseq_index;
 			//Now we reapply all the inputs that we have locally that
 			//the server hasn't yet confirmed. This will 'keep' our position the same,
 			//but also confirm the server position at the same time.
@@ -1094,7 +1075,7 @@ game_core.prototype.client_onserverupdate_recieved = function(data){
 
 game_core.prototype.client_update_local_position = function(){
 
-	if(this.client_predict && this.players.self && this.players.self.state == 'connected') {
+	if(this.client_predict && this.players.self && this.players.self.state === 'connected') {
 
 		//Work out the time we have since we updated the state
 		var t = (this.local_time - this.players.self.state_time) / this._pdt;
@@ -1252,8 +1233,8 @@ game_core.prototype.client_create_configuration = function() {
 	this.client_time = 0.01;            //Our local 'clock' based on server time - client interpolation(net_offset).
 	this.server_time = 0.01;            //The time the server reported it was at, last we heard from it
 
-	this.dt = 0.016;                    //The time that the last frame took to run
-	this.fps = 0;                       //The current instantaneous fps (1/this.dt)
+	this.dt = 16.667;                    //The time that the last frame took to run (millisecond)
+	this.fps = 0;                       //The current instantaneous fps (1000.0/this.dt)
 	this.fps_avg_count = 0;             //The number of samples we have taken for fps_avg
 	this.fps_avg = 0;                   //The current average fps displayed in the debug UI
 	this.fps_avg_acc = 0;               //The accumulation of the last avgcount fps samples
@@ -1582,7 +1563,7 @@ game_core.prototype.client_connect_to_server = function() {
 game_core.prototype.client_refresh_fps = function() {
 
 	//We store the fps for 10 frames, by adding it to this accumulator
-	this.fps = 1/this.dt;
+	this.fps = 1000.0/this.dt;
 	this.fps_avg_acc += this.fps;
 	this.fps_avg_count++;
 
@@ -1653,3 +1634,6 @@ p2.Plane.prototype.draw = function(pos) {
 
 	game.ctx.fillRect(0, pos.y * game.viewport.res_mul, game.world.width * game.viewport.res_mul, (game.world.height - pos.y) * game.viewport.res_mul);
 };
+
+
+

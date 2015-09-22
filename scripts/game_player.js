@@ -2,6 +2,7 @@ var c_bullet = require('./bullet.js');
 var uuid = require('node-uuid');
 
 var p2 = require('p2');
+var c_input = require('./input.js');
 
 var game_player = module.exports = function( game_instance, player_instance, is_ghost ) {
 
@@ -21,6 +22,7 @@ var game_player = module.exports = function( game_instance, player_instance, is_
 	this.cur_state = {pos:{x:0,y:0}};
 	this.state_time = new Date().getTime();
 
+
 	this.is_dead = true;
 
 	this.weapon = c_bullet;
@@ -32,6 +34,7 @@ var game_player = module.exports = function( game_instance, player_instance, is_
 
 	//Our local history of inputs
 	this.inputs = [];
+	this.current_input = new c_input(false, false, false, false, false);
 
 	//physics initalization
 	if (!is_ghost)
