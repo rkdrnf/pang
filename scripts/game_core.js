@@ -275,15 +275,6 @@ game_core.prototype.check_timers = function(dt) {
 	}
 };
 
-// methods deal with add, spawn, clear enemies
-game_core.prototype.add_enemy = function(radius, pos) {
-	var enemy_id = uuid.v1();
-	var enemy = new c_enemy(this, enemy_id, radius, pos);
-	this.enemies[enemy_id] = enemy;
-
-	this.broadcast('spawn_enemy', enemy.get_info());
-};
-
 game_core.prototype.fire_weapon = function(player) {
 	var projectile = player.fire_weapon();
 
@@ -291,6 +282,15 @@ game_core.prototype.fire_weapon = function(player) {
 
 	this.projectiles[projectile.id] = projectile;
 	this.broadcast('spawn_projectile', projectile.get_info());
+};
+
+// methods deal with add, spawn, clear enemies
+game_core.prototype.add_enemy = function(radius, pos) {
+	var enemy_id = uuid.v1();
+	var enemy = new c_enemy(this, enemy_id, radius, pos);
+	this.enemies[enemy_id] = enemy;
+
+	this.broadcast('spawn_enemy', enemy.get_info());
 };
 
 game_core.prototype.client_spawn_enemy = function(info) {
@@ -305,8 +305,8 @@ game_core.prototype.client_spawn_projectile = function(info) {
 
 game_core.prototype.receive_enemy_info = function(info) {
 	info.forEach(function(enemy_info) {
-			this.client_spawn_enemy(info);
-			}.bind(this));
+		this.client_spawn_enemy(enemy_info);
+	}.bind(this));
 };
 
 game_core.prototype.clear_enemies = function() {
@@ -328,13 +328,12 @@ game_core.prototype.add_item = function(radius, pos, type) {
 
 game_core.prototype.client_spawn_item = function(info) {
   console.log('On receive spawn item');
-  console.log(this);
   this.items[info.id] = new c_item(this, info.id, info.radius, info.pos, info.type);
 };
 
 game_core.prototype.receive_item_info = function(info) {
   info.forEach(function(item_info) {
-    this.client_spawn_item(info);
+    this.client_spawn_item(item_info);
   }.bind(this));
 };
 
@@ -356,22 +355,21 @@ game_core.prototype.new_player = function(player) {
 	var existing_infos = [];
 
 	this.for_each_player(function(gp) {
-	existing_infos.push(gp.get_info());
-			if (gp.id == player.user_id) {
+		existing_infos.push(gp.get_info());
+
+		//send new player info to existing players.
+		if (gp.id == new_player.id) {
 			return;
-			}
+		}
+		gp.instance.emit('player_info', {
+			players: [new_player.get_info()]
+		});
+	});
 
-			//send new player info to existing players.
-			gp.instance.emit('player_info', {
-players: [new_player.get_info()]
-});
-			});
-
-//send existing player infos to new player.
-
-new_player.instance.emit('player_info', {
-players: existing_infos
-});
+	//send existing player infos to new player.
+	new_player.instance.emit('player_info', {
+		players: existing_infos
+	});
 
 	var enemies_info = [];
 	this.for_each_enemy(function(enemy) {
@@ -1354,11 +1352,10 @@ game_core.prototype.client_on_receive_player_info = function(data) {
 
 game_core.prototype.client_on_player_disconnected = function(data) {
 	var player = this.players[data.id];
-	if (player)
-		{
+	if (player)	{
 			player.destroy();
 			delete this.players[data.id];
-		}
+	}
 };
 
 game_core.prototype.client_reset_positions = function() {
@@ -1500,6 +1497,7 @@ game_core.prototype.player_disconnected = function(player_id) {
 	var player = this.players[player_id];
 
 	if (player) {
+		player.destroy();
 		delete this.players[player_id];
 	}
 
