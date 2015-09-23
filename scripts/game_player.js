@@ -107,6 +107,7 @@ game_player.prototype.revive = function() {
 	this.is_dead = false;
 	this.p_body.position = [this.game.initial_position.x, this.game.initial_position.y];
 	this.p_body.velocity = [0, 0];
+	this.p_body.force = [0, 0];
 	this.game.physics_world.addBody(this.p_body);
 };
 
@@ -118,7 +119,7 @@ game_player.prototype.draw = function(){
 };
 
 game_player.prototype.destroy = function() {
-	this.game.physics_world.removeBody(this.p_body);
+	this.game.remove_physics(this.id, this.p_body);
 	this.p_body.game_object = null;
 	this.p_body = null;
 	this.p_shape = null;

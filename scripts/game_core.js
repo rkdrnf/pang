@@ -63,6 +63,9 @@ width : 30,
 		BULLET: Math.pow(2,4)
 	};
 
+	this.physics_change_list = {};
+	this.after_physics = [];
+
   this.item_effect = {
     WEAPON: Math.pow(2, 0),
     VIAGRA: Math.pow(2, 1)
@@ -145,31 +148,60 @@ game_core.prototype.init_physics_world = function() {
 		gravity:[0, 9.87]
 	});
 
+	var player_enemy_col = function(data) {
+		var s_A = data.shapeA;
+		var s_B = data.shapeB;
+
+		var playerShape = s_A.collisionGroup == this.collision_group.PLAYER ? s_A : s_B;
+		var enemyShape = s_A.collisionGroup == this.collision_group.ENEMY ? s_A : s_B;
+
+		var player_obj = playerShape.body.game_object;
+		if (player_obj) {
+			this.after_physics.push({
+				func: function() {
+					this.player_die(player_obj);
+					}, 
+				caller: this 
+			});
+		}
+	};
+
+	var player_item_col = function(data) {
+		var s_A = data.shapeA;
+		var s_B = data.shapeB;
+
+		var playershape = s_A.collisionGroup == this.collision_group.PLAYER ? s_A : s_B;
+		var itemshape = s_A.collisionGroup == this.collision_group.ITEM ? s_A : s_B;
+
+		var player_obj = playershape.body.game_object;
+		var item_obj = itemshape.body.item_object;
+
+		if (player_obj && item_obj) {
+			this.after_physics.push({ 
+				func: function() {
+						player_obj.applyitem(item_obj.type);
+						item_obj.destroy();
+						delete this.items[item_obj.id];
+					}, 
+				caller: this 
+			});
+		}
+	};
+
 	this.physics_world.on('beginContact', function(data) {
 		var s_A = data.shapeA;
 		var s_B = data.shapeB;
+
 		if ((s_A.collisionGroup | s_B.collisionGroup) == (this.collision_group.PLAYER | this.collision_group.ENEMY)) {
-			var playerShape = s_A.collisionGroup == this.collision_group.PLAYER ? s_A : s_B;
-			var enemyShape = s_A.collisionGroup == this.collision_group.ENEMY ? s_A : s_B;
+			player_enemy_col.call(this, data);
+			return;
+		} 
 
-			var player_obj = playerShape.body.game_object;
-			if (player_obj) {
-				player_obj.die();
-			}
-		}
     if ((s_A.collisionGroup | s_B.collisionGroup) == (this.collision_group.PLAYER | this.collision_group.ITEM)) {
-			var playerShape = s_A.collisionGroup == this.collision_group.PLAYER ? s_A : s_B;
-			var itemShape = s_A.collisionGroup == this.collision_group.ITEM ? s_A : s_B;
-
-			var player_obj = playerShape.body.game_object;
-      var item_obj = itemShape.body.item_object;
-
-			if (player_obj && item_obj) {
-				player_obj.applyitem(item_obj.type);
-        item_obj.destroy();
-        delete this.items[item_obj.id];
-			}
+			player_item_col.call(this, data);
+			return;
 		}
+
 	}.bind(this));
 };
 
@@ -243,6 +275,16 @@ function sort_timer_job(a,b) {
 }
 
 this.timers[timer_id].job_queue.sort(sort_timer_job);
+};
+
+game_core.prototype.cancel_timer_job = function(timer_id, job_id) {
+	if (!timer_id) {
+		console.log('Unregistered timer canceled job. timer_id :' + timer_id + ' job_id : ' + job_id);
+	}
+
+	this.timers[timer_id].job_queue = this.timers[timer_id].job_queue.filter(function(job) {
+		return job.job_id !== job_id;
+	}.bind(this));
 };
 
 game_core.prototype.check_timers = function(dt) {
@@ -405,11 +447,11 @@ game_core.prototype.create_stage = function() {
 game_core.prototype.on_new_stage = function(stage) {
 
 	this.for_each_player(function(player) {
-		player.revive();
+		this.player_revive(player);
 	}.bind(this));
 	this.broadcast('new_stage', {
-time_left: stage.time_left
-});
+		time_left: stage.time_left
+	});
 };
 
 game_core.prototype.on_stage_end = function(stage) {
@@ -425,6 +467,33 @@ game_core.prototype.client_on_new_stage = function(data) {
 game_core.prototype.client_on_current_stage = function(data) {
 	console.log('On receive current stage');
 	this.stage.client_current_stage(data.time_left, data.enemies_info, data.items_info);
+};
+
+game_core.prototype.player_die = function(player) {
+	player.die();
+
+	if (this.server) {
+		this.on_player_die();
+	}
+};
+
+game_core.prototype.player_revive = function(player) {
+	player.revive();
+};
+
+game_core.prototype.on_player_die = function() {
+	var any_alive = Object.keys(this.players).some(function(id) {
+		return this.players[id].is_dead === false;
+	}.bind(this));
+
+	if (!any_alive) {
+		console.log('all dead');
+		this.on_all_died();
+	}
+};
+
+game_core.prototype.on_all_died = function() {
+	this.stage.game_over();
 };
 
 // (4.22208334636).fixed(n) will return fixed point value to n places, default n = 3
@@ -614,13 +683,16 @@ game_core.prototype.update_physics = function() {
 }; //game_core.prototype.update_physics
 
 game_core.prototype.after_step = function() {
+	this.apply_physics_change();
+
 	Object.keys(this.players).forEach(function(id) {
-			if (id == 'self') return;
+		if (id == 'self') return;
 
-			var player = this.players[id];
+		var player = this.players[id];
 
-			player.pos = this.g_vec2(player.p_body.position);
-			}.bind(this));
+		player.pos = this.g_vec2(player.p_body.position);
+		
+	}.bind(this));
 
 	Object.keys(this.enemies).forEach(function(id) {
 		var enemy = this.enemies[id];
@@ -631,9 +703,55 @@ game_core.prototype.after_step = function() {
     var item = this.items[id];
     item.pos = this.g_vec2(item.p_body.position);
   }.bind(this));
-};
-/*
 
+};
+
+game_core.prototype.apply_physics_change = function() {
+	this.after_physics.forEach(function(func_info) {
+		func_info.func.call(func_info.caller);
+	});
+
+	this.after_physics = [];
+
+	Object.keys(this.physics_change_list).forEach(function(id) {
+		var change_info = this.physics_change_list[id];
+		if (change_info.op === 'add') {
+			this.physics_world.addBody(change_info.body);
+		} else if (change_info.op === 'remove') {
+			this.physics_world.removeBody(change_info.body);
+		}
+	}.bind(this));
+
+	this.physics_change_list = {};
+};
+
+game_core.prototype.add_physics = function(id, body) {
+	var change = this.physics_change_list[id];
+
+	if (change && change.op === 'remove') {
+		delete this.physics_change_list[id];
+	} else {
+		this.physics_change_list[id] = {
+			body: body,
+			op: 'add'
+		};
+	}
+};
+
+game_core.prototype.remove_physics = function(id, body) {
+	var change = this.physics_change_list[id];
+
+	if (change && change.op == 'add') {
+		delete this.physics_change_list[id];
+	} else {
+		this.physics_change_list[id] = {
+			body: body,
+			op: 'remove'
+		};
+	}
+};
+
+/*
    Server side functions
 
    These functions below are specific to the server side only,
@@ -940,9 +1058,9 @@ game_core.prototype.client_process_net_updates = function() {
 
 			if (this.players[id].is_dead !== latest_server_data.player_states[id].dead) {
 				if (latest_server_data.player_states[id].dead) {
-					this.players[id].die();
+					this.player_die(this.players[id]);
 				} else {
-					this.players[id].revive();
+					this.player_revive(this.players[id]);
 				}
 			}
 		}
@@ -1168,23 +1286,22 @@ game_core.prototype.client_update = function() {
 		}
 	}
 
-    for(e_id in this.items) {
-      this.items[e_id].draw();
-    }
+	for(var i_id in this.items) {
+		this.items[i_id].draw();
+	}
 
-		this.groundBody.draw();
 	for(var e_id in this.enemies) {
 		this.enemies[e_id].draw();
 	}
 
-	this.groundBody.draw();
-
-	for(var id in this.projectiles) {
-		this.projectiles[id].draw();
+	for(var p_id in this.projectiles) {
+		this.projectiles[p_id].draw();
 	}
 
-		//Work out the fps average
-		this.client_refresh_fps();
+	this.groundBody.draw();
+
+	//Work out the fps average
+	this.client_refresh_fps();
 
 }; //game_core.update_client
 
@@ -1323,9 +1440,9 @@ game_core.prototype.client_on_receive_player_info = function(data) {
 	data.players.forEach(function(p_info, index, arr) {
 		var player = new game_player(this, undefined, false);
 		if (p_info.is_dead) {
-			player.die();
+			this.player_die(player);
 		} else {
-			player.revive();
+			this.player_revive(player);
 		}
 
 		player.state = 'connected';
@@ -1623,17 +1740,21 @@ game_core.prototype.client_draw_info = function() {
 
 };
 
-p2.Body.prototype.draw = function() {
+p2.Body.prototype.draw = function(color) {
 	this.shapes.forEach(function(shape){
 		shape.draw({
 			x: this.position[0],
 			y: this.position[1]
-		});
+		}, color);
 	}.bind(this));
 };
 
-p2.Circle.prototype.draw = function(pos) {
-	game.ctx.fillStyle = '#ffffff';
+p2.Circle.prototype.draw = function(pos, color) {
+	if (color) {
+		game.ctx.fillStyle = color;
+	} else {
+		game.ctx.fillStyle = '#ffffff';
+	}
 
 	game.ctx.beginPath();
 	game.ctx.arc(pos.x * game.viewport.res_mul, pos.y * game.viewport.res_mul, this.radius * game.viewport.res_mul, 0, 2 * Math.PI, false);
