@@ -943,8 +943,6 @@ game_core.prototype.client_process_net_prediction_correction = function() {
 	//Our latest server position
 	var my_server_pos = my_server_state.pos;
 
-	console.log(my_server_pos);
-
 	//Update the debug server position block
 	this.ghosts[this.players.self.id].server_pos.pos = this.pos(my_server_pos);
 
@@ -962,8 +960,6 @@ game_core.prototype.client_process_net_prediction_correction = function() {
 				break;
 			}
 		}
-
-		console.log(my_last_input_on_server);
 
 		//Now we can crop the list of any updates we have already processed
 		if(lastinputseq_index != -1) {
