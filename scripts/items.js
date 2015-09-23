@@ -41,6 +41,9 @@ c_item.prototype.draw = function() {
 };
 
 c_item.prototype.destroy = function() {
+	if (this.destroyed) return;
+
+	this.destroyed = true;
   this.game.physics_world.removeBody(this.p_body);
   this.p_body.game_object = null;
   this.p_shape = null;

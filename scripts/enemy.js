@@ -43,7 +43,6 @@ var c_enemy = module.exports = function(game, id, radius, pos ) {
 		var color_g = Math.round(color_vari.min.g + (color_vari.max.g - color_vari.min.g) * color_rate);
 		var color_b = Math.round(color_vari.min.b + (color_vari.max.b - color_vari.min.b) * color_rate);
 		this.color = 'rgb(' + color_r + ',' + color_g + ',' + color_b + ')';
-		console.log(this.color);
 	}
 };
 
@@ -60,6 +59,9 @@ c_enemy.prototype.draw = function() {
 };
 
 c_enemy.prototype.destroy = function() {
+	if (this.destroyed) return;
+
+	this.destroyed = true;
 	this.game.remove_physics(this.id, this.p_body);
 	this.p_body.game_object = null;
 	this.p_shape = null;

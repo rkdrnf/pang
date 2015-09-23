@@ -119,6 +119,9 @@ game_player.prototype.draw = function(){
 };
 
 game_player.prototype.destroy = function() {
+	if (this.destroyed) return;
+
+	this.destroyed = true;
 	this.game.remove_physics(this.id, this.p_body);
 	this.p_body.game_object = null;
 	this.p_body = null;
