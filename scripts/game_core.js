@@ -1335,7 +1335,7 @@ game_core.prototype.client_create_ping_timer = function() {
 	setInterval(function(){
 
 			this.last_ping_time = new Date().getTime() - this.fake_lag;
-			this.socket.send('p.' + (this.last_ping_time) );
+			this.socket.emit('ping', this.last_ping_time);
 
 			}.bind(this), 1000);
 
@@ -1597,9 +1597,6 @@ game_core.prototype.client_onnetmessage = function(data) {
 				case 'e' : //end game requested
 					this.client_ondisconnect(commanddata); break;
 
-				case 'p' : //server ping
-					this.client_onping(commanddata); break;
-
 				case 'c' : //other player changed colors
 					this.client_on_otherclientcolorchange(commanddata); break;
 
@@ -1680,6 +1677,7 @@ game_core.prototype.client_connect_to_server = function() {
 	this.socket.on('onserverupdate', this.client_onserverupdate_recieved.bind(this));
 	//Handle when we connect to the server, showing state and storing id's.
 	this.socket.on('onconnected', this.client_onconnected.bind(this));
+	this.socket.on('ping', this.client_onping.bind(this));
 	//On error we just show that we are not connected for now. Can print the data.
 	this.socket.on('error', this.client_ondisconnect.bind(this));
 	//On message from the server, we parse the commands and send it to the handlers
