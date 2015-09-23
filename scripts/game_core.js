@@ -994,6 +994,16 @@ game_core.prototype.client_process_net_updates = function() {
 	//searching throught the server_updates array for current_time in between 2 other times.
 	// Then :  other player position = lerp ( past_pos, target_pos, current_time );
 
+	//calculate update delay
+	if (this.last_server_time != this.client_time) {
+		var delay = (this.local_time - this.last_update_time).fixed(3);
+		if (delay > 0.2) {
+			console.log('Server update delayed for ' + delay + 'sec');
+		}
+		this.last_update_time = this.local_time; 
+	}
+	this.last_server_time = this.client_time;
+
 	//Find the position in the timeline of updates we stored.
 	var current_time = this.client_time;
 	var count = this.server_updates.length-1;
@@ -1034,7 +1044,6 @@ game_core.prototype.client_process_net_updates = function() {
 	//lerp requires the 0,1 value to lerp to? thats the one.
 
 	if(target && previous) {
-
 		this.target_time = target.t;
 
 		var difference = this.target_time - current_time;
@@ -1359,7 +1368,7 @@ game_core.prototype.client_create_configuration = function() {
 	this.fake_lag = 0;                //If we are simulating lag, this applies only to the input client (not others)
 	this.fake_lag_time = 0;
 
-	this.net_offset = 20;              //100 ms latency between server and client interpolation for other clients
+	this.net_offset = 50;              //100 ms latency between server and client interpolation for other clients
 	this.buffer_size = 2;               //The size of the server history to keep for rewinding/interpolating.
 	this.target_time = 0.01;            //the time where we want to be in the server timeline
 	this.oldest_tick = 0.01;            //the last time tick we have available in the buffer
