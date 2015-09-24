@@ -16,7 +16,7 @@ var bullet = module.exports = function(id, player) {
 
 
 	this.p_body = new p2.Body({
-		mass: 1,
+		mass: 0,
 		position: [this.pos.x, this.pos.y - 1]
 	});
 
@@ -30,6 +30,7 @@ var bullet = module.exports = function(id, player) {
 	this.p_shape.collisionMask = this.game.collision_group.ENEMY;
 
 	this.p_body.addShape(this.p_shape);
+	this.p_body.bullet_object = this;
 	this.game.physics_world.addBody(this.p_body);
 };
 

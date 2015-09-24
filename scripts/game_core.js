@@ -8,7 +8,6 @@ var c_stage = require('./stage.js');
 var c_projectile = require('./projectile.js');
 var c_bullet = require('./bullet.js');
 
-
 var frame_time = 60/1000;
 if('undefined' != typeof(global.GLOBAL)) frame_time = 45;
 
@@ -170,6 +169,19 @@ game_core.prototype.init_physics_world = function() {
         delete this.items[item_obj.id];
 			}
 		}
+		if ((s_A.collisionGroup | s_B.collisionGroup) == (this.collision_group.ENEMY | this.collision_group.BULLET)) {
+			var enemyShape = s_A.collisionGroup == this.collision_group.ENEMY ? s_A : s_B;
+			var bulletShape = s_A.collisionGroup == this.collision_group.BULLET ? s_A : s_B;
+
+			var enemy_obj = enemyShape.body.game_object;
+			var bullet_obj = bulletShape.body.bullet_object;
+
+			if(enemy_obj && bullet_obj) {
+				bullet_obj.destroy();
+				delete this.projectiles[bullet_obj.id];
+			}
+		}
+
 	}.bind(this));
 };
 
@@ -284,23 +296,9 @@ game_core.prototype.add_enemy = function(radius, pos) {
 	this.broadcast('spawn_enemy', enemy.get_info());
 };
 
-game_core.prototype.fire_weapon = function(player) {
-	var projectile = player.fire_weapon();
-
-	if (!projectile) return;
-
-	this.projectiles[projectile.id] = projectile;
-	this.broadcast('spawn_projectile', projectile.get_info());
-};
-
 game_core.prototype.client_spawn_enemy = function(info) {
 	console.log('On receive spawn enemy');
 	this.enemies[info.id] = new c_enemy(this, info.id, info.radius, info.pos);
-};
-
-game_core.prototype.client_spawn_projectile = function(info) {
-	console.log('On receive spawn projectile');
-	this.projectiles[info.id] = new this.weapon_list[info.type](info.id, this.players[info.player_id]);
 };
 
 game_core.prototype.receive_enemy_info = function(info) {
@@ -343,6 +341,36 @@ game_core.prototype.clear_items = function() {
     item.destroy();
     delete this.items[item.id];
   }.bind(this));
+};
+
+// methods deal with add, spawn, fire, clear projectiles
+game_core.prototype.add_projectile = function(type) {
+	var projectile_id = uuid.v1();
+	var projectile = new c_projectile(projectile_id, type);
+	this.projectiles[projectile_id] = projectile;
+
+	this.broadcast('spawn_projectile', projectile.get_info());
+};
+
+game_core.prototype.fire_weapon = function(player) {
+	var projectile = player.fire_weapon();
+
+	if (!projectile) return;
+
+	this.projectiles[projectile.id] = projectile;
+	this.broadcast('spawn_projectile', projectile.get_info());
+};
+
+game_core.prototype.client_spawn_projectile = function(info) {
+	console.log('On receive spawn projectile');
+	this.projectiles[info.id] = new this.weapon_list[info.type](info.id, this.players[info.player_id]);
+};
+
+game_core.prototype.clear_projectiles = function() {
+	this.for_each_projectile(function(projectile) {
+		projectile.destroy();
+		delete this.projectiles[projectile.id];
+	}.bind(this));
 };
 
 game_core.prototype.new_player = function(player) {
@@ -417,6 +445,7 @@ time_left: stage.time_left
 game_core.prototype.on_stage_end = function(stage) {
 	this.clear_enemies();
   this.clear_items();
+  this.clear_projectiles();
 };
 
 game_core.prototype.client_on_new_stage = function(data) {
@@ -527,6 +556,34 @@ game_core.prototype.check_collision = function( item ) {
 
 }; //game_core.check_collision
 
+game_core.prototype.check_out = function( projectile ) {
+	
+	//Left wall.
+	if(projectile.pos.x <= projectile.pos_limits.x_min) {
+		projectile.pos.x = projectile.pos_limits.x_min;
+	}
+
+	//Right wall
+	if(projectile.pos.x >= projectile.pos_limits.x_max ) {
+		projectile.pos.x = projectile.pos_limits.x_max;
+	}
+
+	//Roof wall.
+	if(projectile.pos.y <= projectile.pos_limits.y_min) {
+		projectile.pos.y = projectile.pos_limits.y_min;
+	}
+
+	//Floor wall
+	if(projectile.pos.y >= projectile.pos_limits.y_max ) {
+		projectile.pos.y = projectile.pos_limits.y_max;
+	}
+
+	//Fixed point helps be more deterministic
+	projectile.pos.x = projectile.pos.x.fixed(4);
+	projectile.pos.y = projectile.pos.y.fixed(4);
+
+};
+
 
 game_core.prototype.process_input = function( player ) {
 
@@ -557,7 +614,7 @@ game_core.prototype.process_input = function( player ) {
 					y_dir -= 1;
 				}
 				if(key == 'x') {
-					if (this.server) {
+					if (this.server && !player.is_dead ) {
 						this.fire_weapon(player);
 					}
 				}
@@ -1179,8 +1236,8 @@ game_core.prototype.client_update = function() {
 
 	this.groundBody.draw();
 
-	for(var id in this.projectiles) {
-		this.projectiles[id].draw();
+	for(var e_id in this.projectiles) {
+		this.projectiles[e_id].draw();
 	}
 
 		//Work out the fps average
@@ -1521,6 +1578,12 @@ game_core.prototype.for_each_enemy = function(func) {
 game_core.prototype.for_each_item = function(func) {
   Object.keys(this.items).forEach(function(id) {
     func.call(this, this.items[id]);
+  }.bind(this));
+};
+
+game_core.prototype.for_each_projectile = function(func) {
+  Object.keys(this.projectiles).forEach(function(id) {
+    func.call(this, this.projectiles[id]);
   }.bind(this));
 };
 

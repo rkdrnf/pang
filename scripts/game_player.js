@@ -1,4 +1,5 @@
 var c_bullet = require('./bullet.js');
+var c_projectile = require('./projectile.js');
 var uuid = require('node-uuid');
 
 var p2 = require('p2');
@@ -25,7 +26,7 @@ var game_player = module.exports = function( game_instance, player_instance, is_
 
 	this.weapon = c_bullet;
 	this.fire_timer = 0;
-	this.fire_rate = 2;
+	this.fire_rate = 1;
 
 	this.width = 1;
 	this.height = 1;

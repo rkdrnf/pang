@@ -1,6 +1,7 @@
 
-var projectile = module.exports = function(id){
+var projectile = module.exports = function(id, type){
 	this.id = id;
+	this.type = type;
 };
 
 projectile.prototype.fire = function(){
@@ -24,5 +25,11 @@ projectile.prototype.draw = function(){
 	this.p_body.draw();
 };
 
-
+projectile.prototype.destroy = function() {
+	this.game.physics_world.removeBody(this.p_body);
+	this.p_body.game_object = null;
+	this.p_shape = null;
+	this.p_body = null;
+	this.game = null;
+};
 
