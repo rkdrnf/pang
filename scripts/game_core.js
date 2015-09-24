@@ -1036,12 +1036,12 @@ game_core.prototype.client_process_net_updates = function() {
 
 	//With no target we store the last known
 	//server position and move to that instead
-	if(!target) {
+	if(!target && this.server_updates.length > 1) {
 		var latest_time = this.server_updates[count].t;
 		var oldest_time = this.server_updates[0].t;
 		console.log('Cannot find interpolation data. current_time : ' + current_time.fixed(3) + ' update_count: ' + this.server_updates.length + ' lastest data :' + latest_time.fixed(3) + ' oldest_data : ' + oldest_time.fixed(3));
-		target = this.server_updates[0];
-		previous = this.server_updates[0];
+		target = this.server_updates[count];
+		previous = this.server_updates[count - 1];
 	}
 
 	//Now that we have a target and a previous destination,
