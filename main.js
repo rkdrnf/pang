@@ -38,6 +38,10 @@ io.on('connection', function(client){
 		game_server.onMessage(client, m);
 	});
 
+	client.on('ping', function(m) {
+		game_server.onPing(client, m);
+	});
+
 	client.on('client_input', function(m){
 		game_server.onInput(client, m);
 	});

@@ -27,6 +27,12 @@ game_server.onMessage = function(client, message) {
 	}
 };
 
+game_server.onPing = function(client, message) {
+	if (client) {
+		client.emit('ping', message);
+	}
+};
+
 game_server.onInput = function(client, input) {
 	var input_commands = input.inputs;
 	var input_time = input.time;

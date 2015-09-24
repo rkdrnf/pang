@@ -1,7 +1,8 @@
 
-var projectile = module.exports = function(id, type){
+var projectile = module.exports = function(id){
 	this.id = id;
-	this.type = type;
+
+	console.log(this.id);
 };
 
 projectile.prototype.fire = function(){
@@ -19,13 +20,13 @@ projectile.prototype.get_info = function(){
 };
 
 projectile.prototype.draw = function(){
-	console.log('projec draw called');
-	console.log('projecpos');
-	console.log(this.p_body.position);
 	this.p_body.draw();
 };
 
 projectile.prototype.destroy = function() {
+	if (this.destroyed) return;
+
+	this.destroyed = true;
 	this.game.physics_world.removeBody(this.p_body);
 	this.p_body.game_object = null;
 	this.p_shape = null;
@@ -33,3 +34,10 @@ projectile.prototype.destroy = function() {
 	this.game = null;
 };
 
+
+projectile.prototype.network_destroy = function() {
+	if (this.destroyed) return;
+
+	this.game.broadcast('destroy_projectile', { id: this.id });
+	this.destroy();
+};

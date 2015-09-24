@@ -24,7 +24,7 @@ var c_item = function(game, id, radius, pos, type) {
 
   this.p_body.addShape(this.p_shape);
   this.p_body.item_object = this;
-  this.game.physics_world.addBody(this.p_body);
+  //this.game.physics_world.addBody(this.p_body);
 };
 
 c_item.prototype.get_info = function() {
@@ -41,6 +41,9 @@ c_item.prototype.draw = function() {
 };
 
 c_item.prototype.destroy = function() {
+	if (this.destroyed) return;
+
+	this.destroyed = true;
   this.game.physics_world.removeBody(this.p_body);
   this.p_body.game_object = null;
   this.p_shape = null;

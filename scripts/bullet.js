@@ -30,8 +30,25 @@ var bullet = module.exports = function(id, player) {
 	this.p_shape.collisionMask = this.game.collision_group.ENEMY;
 
 	this.p_body.addShape(this.p_shape);
-	this.p_body.bullet_object = this;
-	this.game.physics_world.addBody(this.p_body);
+	this.p_body.game_object = this;
+
+
+	if (this.game.server) {
+		this.game.physics_world.addBody(this.p_body);
+	}
 };
+/*
+bullet.prototype.destroy = function() {
+	if (this.destroyed) return;
+
+	this.destroyed = true;	
+  this.game.physics_world.removeBody(this.p_body);
+  this.p_body.game_object = null;
+  this.p_body.bullet_object = null;
+  this.p_shape = null;
+  this.p_body = null;
+  this.game = null;
+};
+*/
 
 bullet.prototype = Object.create(c_projectile.prototype);

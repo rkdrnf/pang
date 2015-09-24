@@ -3,3 +3,4 @@ node_modules/*
 *~
 tags
 scripts/client_game.js
+scripts/*.swp
