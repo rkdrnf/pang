@@ -995,14 +995,20 @@ game_core.prototype.client_process_net_updates = function() {
 	// Then :  other player position = lerp ( past_pos, target_pos, current_time );
 
 	//calculate update delay
-	if (this.last_server_time != this.client_time) {
-		var delay = (this.local_time - this.last_update_time).fixed(3);
-		if (delay > 0.2) {
-			console.log('Server update delayed for ' + delay + 'sec');
-		}
-		this.last_update_time = this.local_time; 
+	if (this.network_delay > 0.1 && this.delay_timer <= 0) {
+		console.log('Server packet is start to be delayed.. delay_time: ' + this.network_delay.fixed(3) 
+				+ ' last_server_time: ' + this.server_time.fixed(3) + ' client_time: ' + this.client_time.fixed(3)
+				+ ' stable_time: ' + (this.server_time - this.client_time).fixed(3));
+		this.delay_timer = this.delay_time;
 	}
-	this.last_server_time = this.client_time;
+
+	if (this.last_server_time != this.server_time) {
+		var delay = (this.server_time - this.last_server_time).fixed(3);
+		if (delay > 0.1) {
+			console.log('Server update delayed for ' + this.network_delay + 'sec');
+		}
+	} 
+	this.last_server_time = this.server_time;
 
 	//Find the position in the timeline of updates we stored.
 	var current_time = this.client_time;
@@ -1033,7 +1039,7 @@ game_core.prototype.client_process_net_updates = function() {
 	if(!target) {
 		var latest_time = this.server_updates[count].t;
 		var oldest_time = this.server_updates[0].t;
-		console.log('cannot find interpolation data. current_time : ' + current_time + ' update_count: ' + this.server_updates.length + 'lastest data :' + latest_time + 'oldest_data : ' + oldest_time);
+		console.log('Cannot find interpolation data. current_time : ' + current_time.fixed(3) + ' update_count: ' + this.server_updates.length + ' lastest data :' + latest_time.fixed(3) + ' oldest_data : ' + oldest_time.fixed(3));
 		target = this.server_updates[0];
 		previous = this.server_updates[0];
 	}
@@ -1174,10 +1180,26 @@ game_core.prototype.client_onserverupdate_recieved = function(data){
 		return;
 	}
 
+	this.delay_timer = 0;
+
+	if (this.network_delay > 0.1) {
+		console.log('Server update delay ended. delayed_time: ' + this.network_delay.fixed(3)
+				+ ' last_server_time: ' + this.server_time.fixed(3) + 'new_server_time: ' + data.t.fixed(3)
+				+ ' client_time: ' + this.client_time.fixed(3));
+	}
+
 	//Store the server time (this is offset by the latency in the network, by the time we get it)
 	this.server_time = data.t;
 	//Update our local offset time from the last server update
+	var target_client_time = this.server_time - (this.net_offset/1000);
+
+	if (this.client_time > data.t) {
+		console.log('Server update has no future data. client_time: ' + this.client_time.fixed(3) + ' latest_server_time: ' + data.t.fixed(3) + ' difference: ' + (this.client_time - data.t).fixed(3));
+	}
+
+	//use recent one as client time
 	this.client_time = this.server_time - (this.net_offset/1000);
+	this.network_delay= 0.0;
 
 	//One approach is to set the position directly as the server tells you.
 	//This is a common mistake and causes somewhat playable results on a local LAN, for example,
@@ -1319,6 +1341,11 @@ game_core.prototype.create_timer = function(){
 			this._dt = new Date().getTime() - this._dte;
 			this._dte = new Date().getTime();
 			this.local_time += this._dt/1000.0;
+			if (this.client_time) {
+				this.client_time += this._dt/1000.0;
+				this.network_delay += this._dt/1000.0;
+				this.delay_timer -= this._dt/1000.0;
+			}
 			}.bind(this), 4);
 };
 
@@ -1375,6 +1402,10 @@ game_core.prototype.client_create_configuration = function() {
 
 	this.client_time = 0.01;            //Our local 'clock' based on server time - client interpolation(net_offset).
 	this.server_time = 0.01;            //The time the server reported it was at, last we heard from it
+
+	this.network_delay = 0.0;						//packet delay from server. minimum delay is packet sending period of server.
+	this.delay_time = 0.3;							//delay log time
+	
 
 	this.dt = 0.016;                    //The time that the last frame took to run
 	this.fps = 0;                       //The current instantaneous fps (1/this.dt)
