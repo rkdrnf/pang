@@ -18,7 +18,7 @@ window.onload = function(){
 	game.viewport = document.getElementById('viewport');
 
 	//Adjust their size
-	game.viewport.res_mul = 16;
+	game.viewport.res_mul = 16; // 1m = 16pixel
 	game.viewport.width = game.world.width * game.viewport.res_mul;
 	game.viewport.height = game.world.height * game.viewport.res_mul;
 

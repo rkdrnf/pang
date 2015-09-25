@@ -513,9 +513,34 @@ game_core.prototype.v_mul_scalar = function(a,b) { return {x: (a.x*b).fixed() , 
 //For the server, we need to cancel the setTimeout that the polyfill creates
 game_core.prototype.stop_update = function() {  window.cancelAnimationFrame( this.updateid );  };
 //Simple linear interpolation
-game_core.prototype.lerp = function(p, n, t) { var _t = Number(t); _t = (Math.max(0, Math.min(1, _t))).fixed(); return (p + _t * (n - p)).fixed(); };
+game_core.prototype.lerp = function(p, n, t) { return (p + t * (n - p)).fixed(); };
 //Simple linear interpolation between 2 vectors
 game_core.prototype.v_lerp = function(v,tv,t) { return { x: this.lerp(v.x, tv.x, t), y:this.lerp(v.y, tv.y, t) }; };
+
+game_core.prototype.hermite_lerp = function(p0, p1, p2, p3, mu, tension, bias) {
+	var m0,m1,mu2,mu3;
+	var a0,a1,a2,a3;
+
+	mu2 = mu * mu;
+	mu3 = mu2 * mu;
+	m0  = (y1-y0)*(1+bias)*(1-tension)/2;
+	m0 += (y2-y1)*(1-bias)*(1-tension)/2;
+	m1  = (y2-y1)*(1+bias)*(1-tension)/2;
+	m1 += (y3-y2)*(1-bias)*(1-tension)/2;
+	a0 =  2*mu3 - 3*mu2 + 1;
+	a1 =    mu3 - 2*mu2 + mu;
+	a2 =    mu3 -   mu2;
+	a3 = -2*mu3 + 3*mu2;
+
+	return(a0*y1+a1*m0+a2*m1+a3*y2);
+};
+
+game_core.prototype.hermite_v_lerp = function(v0, v1, v2, v3, mu) {
+	return { 
+		x: hermite_lerp(v0.x, v1.x, v2.x, v3.x, mu, 0, 0),
+		y: hermite_lerp(v0.y, v1.y, v2.y, v3.y, mu, 0, 0)	
+  };
+}
 
 
 /*
@@ -1052,7 +1077,7 @@ game_core.prototype.client_process_net_updates = function() {
 	if(target && previous) {
 		this.target_time = target.t;
 
-		var difference = this.target_time - current_time;
+		var difference = current_time - previous.t;
 		var max_difference = (target.t - previous.t).fixed(3);
 		var time_point = (difference/max_difference).fixed(3);
 
@@ -1067,18 +1092,18 @@ game_core.prototype.client_process_net_updates = function() {
 		var latest_server_data = this.server_updates[ this.server_updates.length-1 ];
 
 		//state update
-		for(var id in this.players) {
-			if (id === 'self') continue;
-			if (!latest_server_data.player_states[id]) continue;
+		this.for_each_player(function(player) {
+			var id = player.id;
+			if (!latest_server_data.player_states[id]) return;
 
-			if (this.players[id].is_dead !== latest_server_data.player_states[id].dead) {
+			if (player.is_dead !== latest_server_data.player_states[id].dead) {
 				if (latest_server_data.player_states[id].dead) {
-					this.player_die(this.players[id]);
+					this.player_die(player);
 				} else {
-					this.player_revive(this.players[id]);
+					this.player_revive(player);
 				}
 			}
-		}
+		});
 
 		this.for_each_player(function(player) {
 			var id = player.id;
@@ -1099,7 +1124,7 @@ game_core.prototype.client_process_net_updates = function() {
 
 
 			if (this.client_smoothing) {
-				player.p_body.position = this.p_vec2(this.v_lerp(player.pos, this.ghosts[id].client_pos.pos, this._pdt*this.client_smooth));
+				player.p_body.position = this.p_vec2(this.pos(this.ghosts[id].client_pos.pos));
 			} else {
 				player.p_body.position = this.p_vec2(this.pos(this.ghosts[id].client_pos.pos));
 			}
@@ -1107,7 +1132,6 @@ game_core.prototype.client_process_net_updates = function() {
 
     (function() {
       for (var id in this.items) {
-        if (!latest_server_data.item_states[id]) continue;
         if (!target.item_states[id] || !previous.item_states[id]) continue;
 
         var other_target_pos = target.item_states[id].pos;
@@ -1116,7 +1140,7 @@ game_core.prototype.client_process_net_updates = function() {
         var client_pos = this.v_lerp(other_past_pos, other_target_pos, time_point);
         var other = this.items[id];
         if (this.client_smoothing) {
-          other.p_body_position = this.p_vec2(this.v_lerp(other.pos, client_pos, this._pdt*this.client_smooth));
+          other.p_body_position = this.p_vec2(this.pos(client_pos));
         } else {
           other.p_body_position = this.p_vec2(this.pos(client_pos));
         }
@@ -1125,7 +1149,6 @@ game_core.prototype.client_process_net_updates = function() {
 
 		this.for_each_enemy(function(enemy) {
 			var id = enemy.id;
-			if (!latest_server_data.enemy_states[id]) return;
 			if (!target.enemy_states[id] || !previous.enemy_states[id]) return;
 
 			//The other players positions in this timeline, behind us and in front of us
@@ -1137,7 +1160,14 @@ game_core.prototype.client_process_net_updates = function() {
 			var client_pos = this.v_lerp(other_past_pos, other_target_pos, time_point);
 
 			if (this.client_smoothing) {
-				enemy.p_body.position = this.p_vec2(this.v_lerp(enemy.pos, client_pos, this._pdt*this.client_smooth));
+				enemy.p_body.position = this.p_vec2(this.pos(client_pos));
+				//enemy.p_body.position = this.p_vec2(this.v_lerp(enemy.pos, client_pos, this._pdt*this.client_smooth));
+				if (other_target_pos.y - enemy.p_body.position[1] > 0.4) {
+					console.log('enemy position difference : ' + (other_target_pos.y - enemy.p_body.position[1]).fixed(3)
+					+ ' client_pos difference: ' + (other_target_pos.y - client_pos.y).fixed(3)
+					+ ' latest_pos difference: ' + (latest_server_data.enemy_states[id].pos.y - other_target_pos.y).fixed(3)
+					);
+				}
 			} else {
 				enemy.p_body.position = this.p_vec2(this.pos(client_pos));
 			}
@@ -1395,7 +1425,7 @@ game_core.prototype.client_create_configuration = function() {
 	this.fake_lag = 0;                //If we are simulating lag, this applies only to the input client (not others)
 	this.fake_lag_time = 0;
 
-	this.net_offset = 50;              //100 ms latency between server and client interpolation for other clients
+	this.net_offset = 20;              //100 ms latency between server and client interpolation for other clients
 	this.buffer_size = 2;               //The size of the server history to keep for rewinding/interpolating.
 	this.target_time = 0.01;            //the time where we want to be in the server timeline
 	this.oldest_tick = 0.01;            //the last time tick we have available in the buffer
