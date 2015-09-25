@@ -7,6 +7,8 @@ var c_timer = require('./timer.js');
 var c_stage = require('./stage.js');
 var c_projectile = require('./projectile.js');
 var c_bullet = require('./bullet.js');
+var c_ui_manager = require('./ui_manager');
+var c_main_text_ui = require('./main_text_ui');
 
 
 var frame_time = 60/1000;
@@ -136,7 +138,10 @@ if (!this.server) {
 		this.client_create_debug_gui();
 	}
 
+	this.ui_manager = new c_ui_manager(this);
+	this.ui_manager.add(c_main_text_ui);
 	this.create_stage();
+
 } else {
 	this.server_time = 0;
 	this.laststate = {};
@@ -450,9 +455,10 @@ game_core.prototype.on_new_stage = function(stage) {
 	});
 };
 
-game_core.prototype.on_stage_end = function(stage) {
+game_core.prototype.on_stage_end = function(time, reason) {
 	this.broadcast('end_stage', {
-		time_left: stage.end_time
+		time_left: time,
+		reason: reason 
 	});
 };
 
@@ -489,6 +495,7 @@ game_core.prototype.client_on_stage_ready = function(data) {
 
 game_core.prototype.client_on_stage_end = function(data) {
 	console.log('On receive stage end');
+	this.stage.end_stage(data.reason);
 }
 
 game_core.prototype.player_die = function(player) {
@@ -1383,6 +1390,8 @@ game_core.prototype.client_update = function() {
 
 	this.groundBody.draw();
 
+	this.ui_manager.draw();
+
 	//Work out the fps average
 	this.client_refresh_fps();
 
@@ -1827,7 +1836,8 @@ game_core.prototype.client_draw_info = function() {
 	//Reset the style back to full white.
 	this.ctx.fillStyle = 'rgba(255,255,255,1)';
 
-
+	this.ctx.font = "10px Arial";
+	this.ctx.textAlign = "start"
 	this.ctx.fillText('time left : ' + this.stage.time_left.fixed(3), 30, 30);
 
 };

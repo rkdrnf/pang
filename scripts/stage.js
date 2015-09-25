@@ -1,4 +1,5 @@
 var c_timer = require('./timer.js');
+var Const = require('./const.js');
 
 var c_stage = module.exports = function(game_instance) {
 	this.stage_time = 13;
@@ -66,6 +67,8 @@ c_stage.prototype.server_new_stage= function(reason) {
 
 c_stage.prototype.client_new_stage = function(t) {
 	this.time_left = t;
+
+	this.game.ui_manager.send_event(Const.ui.main_text_ui, 'show_start');
 };
 
 c_stage.prototype.client_current_stage = function(t, enemies_info, items_info) {
@@ -96,16 +99,24 @@ c_stage.prototype.adjust_difficulty = function(reason) {
 };
 
 c_stage.prototype.end_stage = function(reason) {
-	if (reason === this.new_stage_reason.GAME_OVER) {
-		this.game.cancel_timer_job(this.timer_id, this.timer_job.STAGE_END);
+	if (this.game.server) {
+		if (reason === this.new_stage_reason.GAME_OVER) {
+			this.game.cancel_timer_job(this.timer_id, this.timer_job.STAGE_END);
+		}
+
+		this.game.cancel_timer_job(this.timer_id, this.timer_job.SPAWN_ENEMY);
+		this.game.cancel_timer_job(this.timer_id, this.timer_job.SPAWN_ITEM);
+
+		this.game.on_stage_end(this.end_time, reason);
+
+		this.game.add_timer(this.timer_id, this.timer_job.STAGE_READY, this.end_time, { reason: reason });
+	} else {
+		if (reason === this.new_stage_reason.GAME_OVER) {
+			this.game.ui_manager.send_event(Const.ui.main_text_ui, 'show_end');
+		} else if (reason === this.new_stage_reason.NEXT_STAGE) { 
+			this.game.ui_manager.send_event(Const.ui.main_text_ui, 'show_next');
+	  }
 	}
-
-	this.game.cancel_timer_job(this.timer_id, this.timer_job.SPAWN_ENEMY);
-	this.game.cancel_timer_job(this.timer_id, this.timer_job.SPAWN_ITEM);
-
-	this.game.on_stage_end(this);
-
-	this.game.add_timer(this.timer_id, this.timer_job.STAGE_READY, this.end_time, { reason: reason });
 };
 
 c_stage.prototype.ready_stage= function(reason) {
@@ -115,6 +126,8 @@ c_stage.prototype.ready_stage= function(reason) {
 
 	if (this.game.server) {
 		this.game.add_timer(this.timer_id, this.timer_job.STAGE_NEW, this.ready_time, { reason: reason });
+	} else {
+		this.game.ui_manager.send_event(Const.ui.main_text_ui, 'show_ready');
 	}
 };
 
