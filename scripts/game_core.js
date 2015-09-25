@@ -62,7 +62,8 @@ width : 30,
 		ENEMY: Math.pow(2,1),
 		GROUND: Math.pow(2,2),
 		ITEM: Math.pow(2,3),
-		BULLET: Math.pow(2,4)
+		BULLET: Math.pow(2,4),
+		WALL: Math.pow(2,5)
 	};
 
 	this.physics_change_list = {};
@@ -193,6 +194,25 @@ game_core.prototype.init_physics_world = function() {
 		}
 	};
 
+	var enemy_ground_col = function(data) {
+		var s_A = data.shapeA;
+		var s_B = data.shapeB;
+
+		var enemyshape = s_A.collisionGroup == this.collision_group.ENEMY ? s_A : s_B;
+
+		var enemy_obj = enemyshape.body.game_object;
+
+		if (enemy_obj) {
+			this.after_physics.push({ 
+				func: function() {
+						enemy_obj.network_destroy();
+						delete this.enemies[enemy_obj.id];
+					}, 
+				caller: this 
+			});
+		}
+	};
+
 	this.physics_world.on('beginContact', function(data) {
 		var s_A = data.shapeA;
 		var s_B = data.shapeB;
@@ -207,6 +227,10 @@ game_core.prototype.init_physics_world = function() {
 			return;
 		}
 
+		if ((s_A.collisionGroup | s_B.collisionGroup) == (this.collision_group.ENEMY | this.collision_group.GROUND)) {
+			enemy_ground_col.call(this, data);
+			return;
+		}
 	}.bind(this));
 };
 
@@ -230,7 +254,7 @@ game_core.prototype.make_ground_and_wall = function() {
 	});
 	var leftWallShape = new p2.Plane();
 
-	leftWallShape.collisionGroup = this.collision_group.GROUND;
+	leftWallShape.collisionGroup = this.collision_group.WALL;
 	leftWallShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY;
 	this.leftWall.addShape(leftWallShape);
 	this.physics_world.addBody(this.leftWall);
@@ -242,7 +266,7 @@ game_core.prototype.make_ground_and_wall = function() {
 	});
 	var rightWallShape = new p2.Plane();
 
-	rightWallShape.collisionGroup = this.collision_group.GROUND;
+	rightWallShape.collisionGroup = this.collision_group.WALL;
 	rightWallShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY;
 	this.rightWall.addShape(rightWallShape);
 	this.physics_world.addBody(this.rightWall);
@@ -356,6 +380,14 @@ game_core.prototype.receive_enemy_info = function(info) {
 	}.bind(this));
 };
 
+game_core.prototype.client_destroy_enemy = function(id) {
+	var enemy =	this.enemies[id];
+
+	if (enemy) {
+		enemy.destroy();
+		delete this.enemies[id]
+	}
+};
 game_core.prototype.clear_enemies = function() {
 	console.log('Clear enemies');
 	this.for_each_enemy(function(enemy) {
@@ -1792,6 +1824,7 @@ game_core.prototype.client_connect_to_server = function() {
 	this.socket.on('spawn_enemy', this.client_spawn_enemy.bind(this));
 	this.socket.on('spawn_item', this.client_spawn_item.bind(this));
 	this.socket.on('spawn_projectile', this.client_spawn_projectile.bind(this));
+	this.socket.on('destroy_enemy', this.client_destroy_enemy.bind(this));
 }; //game_core.client_connect_to_server
 
 

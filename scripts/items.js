@@ -20,7 +20,7 @@ var c_item = function(game, id, radius, pos, type) {
   });
 
   this.p_shape.collisionGroup = this.game.collision_group.ITEM;
-  this.p_shape.collisionMask = this.game.collision_group.GROUND | this.game.collision_group.PLAYER;
+  this.p_shape.collisionMask = this.game.collision_group.GROUND | this.game.collision_group.PLAYER | this.game.collision_group.WALL;
 
   this.p_body.addShape(this.p_shape);
   this.p_body.item_object = this;

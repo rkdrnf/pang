@@ -30,7 +30,7 @@ var c_enemy = module.exports = function(game, id, radius, pos ) {
 	});
 
 	this.p_shape.collisionGroup = this.game.collision_group.ENEMY;
-	this.p_shape.collisionMask = this.game.collision_group.GROUND | this.game.collision_group.PLAYER;
+	this.p_shape.collisionMask = this.game.collision_group.GROUND | this.game.collision_group.PLAYER | this.game.collision_group.WALL;
 
 	this.p_body.addShape(this.p_shape);
 	this.p_body.game_object = this;
@@ -56,6 +56,13 @@ c_enemy.prototype.get_info = function() {
 
 c_enemy.prototype.draw = function() {
 	this.p_body.draw(this.color);
+};
+
+c_enemy.prototype.network_destroy = function() {
+	if (this.destroyed) return;
+
+	this.game.broadcast('destroy_enemy', this.id);
+	this.destroy();
 };
 
 c_enemy.prototype.destroy = function() {
