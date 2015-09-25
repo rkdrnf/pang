@@ -2,6 +2,9 @@ var c_timer = require('./timer.js');
 
 var c_stage = module.exports = function(game_instance) {
 	this.stage_time = 13;
+	this.ready_time = 5;
+	this.end_time = 3;
+
 	this.time_left = this.stage_time;
 	this.game = game_instance;
 
@@ -17,9 +20,11 @@ var c_stage = module.exports = function(game_instance) {
 	];
 
 	this.timer_job = {
-		STAGE_END : 0,
-		SPAWN_ENEMY : 1,
-		SPAWN_ITEM : 2
+		STAGE_END 	: 0,
+		STAGE_READY : 1,
+		STAGE_NEW 	: 2,
+		SPAWN_ENEMY : 3,
+		SPAWN_ITEM 	: 4
 	};
 
 	this.new_stage_reason = {
@@ -27,8 +32,6 @@ var c_stage = module.exports = function(game_instance) {
 		GAME_OVER : 1,
 		NEXT_STAGE : 2
 	};
-
-
 };
 
 
@@ -38,7 +41,7 @@ c_stage.prototype.start = function() {
 	this.game.register_timer(this);
 	console.log('stage timer registered');
 	if (this.game.server) {
-		this.server_new_stage(this.new_stage_reason.NEW_GAME);
+		this.ready_stage(this.new_stage_reason.NEW_GAME);
 	}
 };
 
@@ -46,7 +49,7 @@ c_stage.prototype.server_new_stage= function(reason) {
 	this.adjust_difficulty(reason);
 
 	this.time_left = this.stage_time;
-	this.game.add_timer(this.timer_id, this.timer_job.STAGE_END, this.time_left);
+	this.game.add_timer(this.timer_id, this.timer_job.STAGE_END, this.time_left, { reason: this.new_stage_reason.NEXT_STAGE });
 
 	this.make_random_enemies();
 
@@ -63,8 +66,6 @@ c_stage.prototype.server_new_stage= function(reason) {
 
 c_stage.prototype.client_new_stage = function(t) {
 	this.time_left = t;
-	this.clear_enemies();
-	this.clear_items();
 };
 
 c_stage.prototype.client_current_stage = function(t, enemies_info, items_info) {
@@ -103,6 +104,18 @@ c_stage.prototype.end_stage = function(reason) {
 	this.game.cancel_timer_job(this.timer_id, this.timer_job.SPAWN_ITEM);
 
 	this.game.on_stage_end(this);
+
+	this.game.add_timer(this.timer_id, this.timer_job.STAGE_READY, this.end_time, { reason: reason });
+};
+
+c_stage.prototype.ready_stage= function(reason) {
+	this.time_left = this.ready_time;
+
+	this.game.on_stage_ready(this.ready_time, reason);
+
+	if (this.game.server) {
+		this.game.add_timer(this.timer_id, this.timer_job.STAGE_NEW, this.ready_time, { reason: reason });
+	}
 };
 
 c_stage.prototype.make_random_enemies = function() {
@@ -128,17 +141,13 @@ c_stage.prototype.make_random_enemies = function() {
 };
 
 c_stage.prototype.game_over = function() {
-	this.end_stage(this.new_stage_reason.GAME_OVER);
-	this.server_new_stage(this.new_stage_reason.GAME_OVER);
+	var reason = this.new_stage_reason.GAME_OVER;
+	this.end_stage(reason);
 };
 
 //add enemies by stage's own rule
 c_stage.prototype.add_enemy = function(info) {
 	this.game.add_enemy(info.radius, info.pos);
-};
-
-c_stage.prototype.clear_enemies = function() {
-	this.game.clear_enemies();
 };
 
 c_stage.prototype.add_item = function(info) {
@@ -151,17 +160,28 @@ c_stage.prototype.clear_items = function() {
 
 c_stage.prototype.on_timer = function(job_id, info) {
 	if (job_id === this.timer_job.STAGE_END) {
-		this.end_stage(this.new_stage_reason.NEXT_STAGE);
-		this.server_new_stage(this.new_stage_reason.NEXT_STAGE);
+		this.end_stage(info.reason);
+		return;
+	}
+
+	if (job_id === this.timer_job.STAGE_READY) {
+		this.ready_stage(info.reason);
+		return;
+	}
+
+	if (job_id === this.timer_job.STAGE_NEW) {
+		this.server_new_stage(info.reason);
 		return;
 	}
 
 	if (job_id === this.timer_job.SPAWN_ENEMY) {
 		this.add_enemy(info);
+		return;
 	}
 
 	if(job_id == this.timer_job.SPAWN_ITEM) {
 		this.add_item(info);
+		return;
 	}
 };
 

@@ -445,19 +445,32 @@ game_core.prototype.create_stage = function() {
 };
 
 game_core.prototype.on_new_stage = function(stage) {
-
-	this.for_each_player(function(player) {
-		this.player_revive(player);
-	}.bind(this));
 	this.broadcast('new_stage', {
 		time_left: stage.time_left
 	});
 };
 
 game_core.prototype.on_stage_end = function(stage) {
-	this.clear_enemies();
-  this.clear_items();
+	this.broadcast('end_stage', {
+		time_left: stage.end_time
+	});
 };
+
+game_core.prototype.on_stage_ready = function(time, reason) {
+	this.clear_enemies();
+	this.clear_items();
+
+	if (this.server) {
+		this.for_each_player(function(player) {
+			this.player_revive(player);
+		}.bind(this));
+
+		this.broadcast('ready_stage', {
+			time_left: time,
+			reason: reason
+		});
+	}
+}
 
 game_core.prototype.client_on_new_stage = function(data) {
 	console.log('On receive new stage');
@@ -468,6 +481,15 @@ game_core.prototype.client_on_current_stage = function(data) {
 	console.log('On receive current stage');
 	this.stage.client_current_stage(data.time_left, data.enemies_info, data.items_info);
 };
+
+game_core.prototype.client_on_stage_ready = function(data) {
+	console.log('On receive stage ready');
+	this.stage.ready_stage(data.reason);
+};
+
+game_core.prototype.client_on_stage_end = function(data) {
+	console.log('On receive stage end');
+}
 
 game_core.prototype.player_die = function(player) {
 	player.die();
@@ -1753,6 +1775,8 @@ game_core.prototype.client_connect_to_server = function() {
 	//On message from the server, we parse the commands and send it to the handlers
 	this.socket.on('player_info', this.client_on_receive_player_info.bind(this));
 	this.socket.on('new_stage', this.client_on_new_stage.bind(this));
+	this.socket.on('end_stage', this.client_on_stage_end.bind(this));
+	this.socket.on('ready_stage', this.client_on_stage_ready.bind(this));
 	this.socket.on('current_stage', this.client_on_current_stage.bind(this));
 	this.socket.on('message', this.client_onnetmessage.bind(this));
 	this.socket.on('player_disconnected', this.client_on_player_disconnected.bind(this));
