@@ -16,12 +16,21 @@ module.exports = function(grunt) {
 					interrupt: true
 				}
 			}
+		},
+		browserify: {
+			client: {
+				files: {
+					'scripts/client_game.js' : ['scripts/game_core.js', 'scripts/!(game_server|client|client_game).js']
+				}
+			}
 		}
 	});
 
 	grunt.loadNpmTasks('grunt-contrib-watch');
-
+	grunt.loadNpmTasks('grunt-browserify');
+	grunt.loadNpmTasks('grunt-newer');
 	grunt.loadNpmTasks('grunt-contrib-jshint');
 
-	grunt.registerTask('default', ['jshint']);
+	grunt.registerTask('default', ['newer:jshint']);
+	grunt.registerTask('nw', ['newer:browserify']);
 };
