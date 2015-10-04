@@ -14,11 +14,11 @@ var c_stage = module.exports = function(game_instance) {
 	this.enemy_spawn_infos = [];
 
 	this.item_spawn_infos = [
-	{ time : 2, pos: {x: 4, y: 4}, radius: 0.5, type: this.game.item_effect.WEAPON},
-	{ time : 3, pos: {x: 5, y: 3}, radius: 0.5, type: this.game.item_effect.VIAGRA},
+	{ time : 2, pos: {x: 4, y: 4}, radius: 0.5, type: Const.item.shield},
+	/*{ time : 3, pos: {x: 5, y: 3}, radius: 0.5, type: this.game.item_effect.VIAGRA},
 	{ time : 4, pos: {x: 7, y: 6}, radius: 0.5, type: this.game.item_effect.WEAPON},
 	{ time : 5, pos: {x: 9, y: 5}, radius: 0.5, type: this.game.item_effect.VIAGRA},
-	];
+*/	];
 
 	this.timer_job = {
 		STAGE_END 	: 0,
@@ -113,7 +113,7 @@ c_stage.prototype.end_stage = function(reason) {
 	} else {
 		if (reason === this.new_stage_reason.GAME_OVER) {
 			this.game.ui_manager.send_event(Const.ui.main_text_ui, 'show_end');
-		} else if (reason === this.new_stage_reason.NEXT_STAGE) { 
+		} else if (reason === this.new_stage_reason.NEXT_STAGE) {
 			this.game.ui_manager.send_event(Const.ui.main_text_ui, 'show_next');
 	  }
 	}
@@ -141,10 +141,10 @@ c_stage.prototype.make_random_enemies = function() {
 		var spawn_time = Math.random() * (this.stage_time - 4);
 		var radius = Math.random() * (radius_variance.max - radius_variance.min) + radius_variance.min;
 		var spawn_coord = {
-			x: Math.random() * (this.game.world.width), 
+			x: Math.random() * (this.game.world.width),
 			y: -(radius + 1)
 		};
-		
+
 		this.enemy_spawn_infos.push({
 			time: spawn_time,
 			pos: spawn_coord,
@@ -164,7 +164,7 @@ c_stage.prototype.add_enemy = function(info) {
 };
 
 c_stage.prototype.add_item = function(info) {
-	this.game.add_item(info.radius, info.pos);
+	this.game.add_item(info.radius, info.pos, info.type);
 };
 
 c_stage.prototype.clear_items = function() {

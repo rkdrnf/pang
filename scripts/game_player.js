@@ -1,8 +1,8 @@
 var c_bullet = require('./bullet.js');
 var uuid = require('node-uuid');
-
+var Const = require('./const.js');
 var p2 = require('p2');
-
+var i_shield = require('./item/shield.js');
 var game_player = module.exports = function( game_instance, player_instance, is_ghost ) {
 
 	//Store the instance, if any
@@ -27,6 +27,7 @@ var game_player = module.exports = function( game_instance, player_instance, is_
 	this.fire_timer = 0;
 	this.fire_rate = 2;
 
+  this.items = {};
 	this.width = 1;
 	this.height = 1;
 
@@ -96,9 +97,17 @@ game_player.prototype.fire_weapon = function() {
 	}
 };
 
+game_player.prototype.clear_items = function() {
+  console.log("Clear items player has");
+  Object.keys(this.items).forEach(function(type) {
+    this.items[type].destroy();
+  }.bind(this));
+};
+
 game_player.prototype.die = function() {
 	console.log('player is dead');
 	this.is_dead = true;
+  this.clear_items();
 	this.game.physics_world.removeBody(this.p_body);
 };
 
@@ -129,12 +138,20 @@ game_player.prototype.destroy = function() {
 	this.game = null;
 };
 
-game_player.prototype.applyitem = function(type) {
-  if (type == this.game.item_effect.WEAPON) {
-    this.color = 'rgba(0,0,255,0.1)';
-    this.info_color = 'rgba(255,255,255,0.1)';
-  }else {
-    this.color = 'rgba(255,0,0,0.1)';
-    this.info_color = 'rgba(255,255,255,0.1)';
-	}
+/* Determine player must die. */
+game_player.prototype.isDead = function() {
+  if (this.items[Const.item.shield]) {
+    var _shield = this.items[Const.item.shield];
+    if (_shield.survive()) {
+      return false;
+    }else {
+      _shield.destroy();
+      delete this.items[Const.item.shield];
+    }
+  }
+  return true;
+}
+
+game_player.prototype.applyitem = function(item) {
+  this.items[item.type] = item;
 };
