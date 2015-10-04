@@ -26,7 +26,7 @@ var i_shield = module.exports = function(game, id, radius, pos, type) {
 
   this.p_body.addShape(this.p_shape);
   this.p_body.item_object = this;
-  this.game.physics_world.addBody(this.p_body);
+  //this.game.physics_world.addBody(this.p_body);
 }
 
 i_shield.prototype = Object.create(c_item.prototype);
