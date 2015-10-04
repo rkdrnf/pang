@@ -123,7 +123,7 @@ game_player.prototype.revive = function() {
 game_player.prototype.draw = function(){
 	if (!this.is_dead)
 	{
-		this.p_body.draw();
+		this.p_body.draw(this.color);
 	}
 };
 
@@ -154,4 +154,5 @@ game_player.prototype.isDead = function() {
 
 game_player.prototype.applyitem = function(item) {
   this.items[item.type] = item;
+  item.makeEffect(this);
 };

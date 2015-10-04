@@ -1561,7 +1561,7 @@ game_core.prototype.client_on_receive_player_info = function(data) {
 		player.id = p_info.id;
 		this.players[p_info.id] = player;
 		this.players[p_info.id].pos = p_info.pos;
-		this.players[p_info.id].color = '#ffffff';
+		//this.players[p_info.id].color = '#ffffff';
 		this.ghosts[p_info.id] = {
 			server_pos: new game_player(this, undefined, true),
 			client_pos: new game_player(this, undefined, true)
@@ -1571,9 +1571,9 @@ game_core.prototype.client_on_receive_player_info = function(data) {
 			var self = this.players.self;
 
 			this.players.self = player;
-			player.color = '#cc0000';
+			//player.color = '#cc0000';
 			player.id = self.id;
-			player.info_color = '#cc0000';
+			//player.info_color = '#cc0000';
 		}
 	}.bind(this));
 };
@@ -1874,8 +1874,12 @@ p2.Circle.prototype.draw = function(pos, color) {
 	game.ctx.fill();
 };
 
-p2.Box.prototype.draw = function(pos) {
-	game.ctx.fillStyle = '#ffffff';
+p2.Box.prototype.draw = function(pos, color) {
+  if (color) {
+    game.ctx.fillStyle = color;
+  }else {
+    game.ctx.fillStyle = '#ffffff';
+  }
 
 	game.ctx.fillRect((pos.x - this.width / 2.0) * game.viewport.res_mul, (pos.y - this.height / 2.0) * game.viewport.res_mul, this.width * game.viewport.res_mul, this.height * game.viewport.res_mul);
 };

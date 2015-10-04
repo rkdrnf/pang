@@ -32,13 +32,18 @@ var i_shield = module.exports = function(game, id, radius, pos, type) {
 i_shield.prototype = Object.create(c_item.prototype);
 
 i_shield.prototype.survive = function() {
-  console.log("I'm survive! ", this.pray);
   if (this.pray > 0) {
     this.pray = this.pray - 1;
     return true;
   }
-
   return false;
 }
 
+i_shield.prototype.makeEffect = function(player) {
+  console.log("[shield] show effect..");
+  this.pray = 5;
+  var value = '#0d4119';
+  player.color = value;
+  player.info_color = value;
+}
 
