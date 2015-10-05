@@ -145,11 +145,7 @@ c_stage.prototype.make_random_enemies = function() {
 		var bounce_count = Math.floor(Math.random() * (bounce_count_variance.max - bounce_count_variance.min) + bounce_count_variance.min);
 		var bounciness = Math.floor(this.game.enemy_material_level * (1 - (1 / ((1 + bounce_count) * 0.75))));
 		var spawn_coord = {
-<<<<<<< HEAD
 			x: Math.random() * (this.game.world.width - (radius * 2)) + radius, 
-=======
-			x: Math.random() * (this.game.world.width),
->>>>>>> e0ac063e4cebab3593f7652929f387943d610047
 			y: -(radius + 1)
 		};
 
