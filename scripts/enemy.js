@@ -30,9 +30,17 @@ var c_enemy = module.exports = function(game, id, info) {
 		this.pos = info.pos;
 	}
 
+	var vel = {x: 0,  y: 0};
+
+	if (info.vel) {
+		vel = info.vel;	
+		console.log(vel);
+	}
+
 	this.p_body = new p2.Body({
 		mass: info.mass,
-		position: [info.pos.x, info.pos.y]
+		position: [info.pos.x, info.pos.y],
+		velocity: [vel.x, vel.y]
 	});
 
 	this.p_body.damping = 0;

@@ -226,12 +226,12 @@ game_core.prototype.make_enemy_materials = function(level) {
 		this.enemy_materials.push(material);
 
 		var enemy_ground_c_material = new p2.ContactMaterial(material, this.ground_material, {
-			restitution: 0.8 * (1 - (1 / i)),
+			restitution: Math.min(1, 1.2 * (1 - (1 / i))),
 			stiffness: Number.MAX_VALUE
 		});
 		
 		var enemy_player_c_material = new p2.ContactMaterial(material, this.player_material, {
-			restitution: 0.8 * ((1 - 1 / i)),
+			restitution: Math.min(1, 1.2 * ((1 - 1 / i))),
 			stiffness: Number.MAX_VALUE
 		});
 		
