@@ -1,7 +1,7 @@
 var uuid = require('node-uuid');
 var	p2 = require('p2');
 var c_enemy = require('./enemy.js');
-var c_item = require('./items.js');
+var i_shield = require('./item/shield.js');
 var game_player = require('./game_player.js');
 var c_timer = require('./timer.js');
 var c_stage = require('./stage.js');
@@ -9,7 +9,7 @@ var c_projectile = require('./projectile.js');
 var c_bullet = require('./bullet.js');
 var c_ui_manager = require('./ui_manager');
 var c_main_text_ui = require('./main_text_ui');
-
+var Const = require('./const.js');
 
 var frame_time = 60/1000;
 if('undefined' != typeof(global.GLOBAL)) frame_time = 15;
@@ -80,16 +80,6 @@ width : 30,
 
 	this.physics_change_list = {};
 	this.after_physics = [];
-
-  this.item_effect = {
-    WEAPON: Math.pow(2, 0),
-    VIAGRA: Math.pow(2, 1)
-  };
-
-  this.weapon_group = {
-    REVOLVER: Math.pow(2, 0),
-    BAMBOOSPEAR: Math.pow(2, 1)
-  };
 
   // create objects in game.
 	this.enemies = {};
@@ -163,12 +153,14 @@ game_core.prototype.init_physics_world = function() {
 
 		var player_obj = playerShape.body.game_object;
 		if (player_obj) {
-			this.after_physics.push({
-				func: function() {
-					this.player_die(player_obj);
-					}, 
-				caller: this 
-			});
+      if (player_obj.isDead()) {
+			  this.after_physics.push({
+          func: function() {
+            this.player_die(player_obj);
+            },
+          caller: this
+        });
+      }
 		}
 	};
 
@@ -183,13 +175,13 @@ game_core.prototype.init_physics_world = function() {
 		var item_obj = itemshape.body.item_object;
 
 		if (player_obj && item_obj) {
-			this.after_physics.push({ 
+			this.after_physics.push({
 				func: function() {
-						player_obj.applyitem(item_obj.type);
+						player_obj.applyitem(item_obj);
 						item_obj.destroy();
 						delete this.items[item_obj.id];
-					}, 
-				caller: this 
+					},
+				caller: this
 			});
 		}
 	};
@@ -214,7 +206,7 @@ game_core.prototype.init_physics_world = function() {
 		if ((s_A.collisionGroup | s_B.collisionGroup) == (this.collision_group.PLAYER | this.collision_group.ENEMY)) {
 			player_enemy_col.call(this, data);
 			return;
-		} 
+		}
 
     if ((s_A.collisionGroup | s_B.collisionGroup) == (this.collision_group.PLAYER | this.collision_group.ITEM)) {
 			player_item_col.call(this, data);
@@ -427,15 +419,17 @@ game_core.prototype.remove_enemy = function(id) {
 // methods deal with add, spawn, clear items
 game_core.prototype.add_item = function(radius, pos, type) {
   var item_id = uuid.v1();
-  var item = new c_item(this, item_id, radius, pos, type);
-  this.items[item_id] = item;
-
-  this.broadcast('spawn_item', item.get_info());
-};
-
+  if (type === Const.item.shield) {
+    var item = new i_shield(this, item_id, radius, pos, type);
+    this.items[item_id] = item;
+    this.broadcast('spawn_item', item.get_info());
+  }
+}
 game_core.prototype.client_spawn_item = function(info) {
   console.log('On receive spawn item');
-  this.items[info.id] = new c_item(this, info.id, info.radius, info.pos, info.type);
+  if (info.type == Const.item.shield) {
+    this.items[info.id] = new i_shield(this, info.id, info.radius, info.pos, info.type);
+  }
 };
 
 game_core.prototype.receive_item_info = function(info) {
@@ -518,7 +512,7 @@ game_core.prototype.on_new_stage = function(stage) {
 game_core.prototype.on_stage_end = function(time, reason) {
 	this.broadcast('end_stage', {
 		time_left: time,
-		reason: reason 
+		reason: reason
 	});
 };
 
@@ -625,9 +619,9 @@ game_core.prototype.hermite_lerp = function(p0, p1, p2, p3, mu, tension, bias) {
 };
 
 game_core.prototype.hermite_v_lerp = function(v0, v1, v2, v3, mu) {
-	return { 
+	return {
 		x: hermite_lerp(v0.x, v1.x, v2.x, v3.x, mu, 0, 0),
-		y: hermite_lerp(v0.y, v1.y, v2.y, v3.y, mu, 0, 0)	
+		y: hermite_lerp(v0.y, v1.y, v2.y, v3.y, mu, 0, 0)
   };
 }
 
@@ -805,7 +799,7 @@ game_core.prototype.after_step = function() {
 		var player = this.players[id];
 
 		player.pos = this.g_vec2(player.p_body.position);
-		
+
 	}.bind(this));
 
 	Object.keys(this.enemies).forEach(function(id) {
@@ -905,20 +899,20 @@ game_core.prototype.server_update = function(){
 	var states = {};
 
 	this.for_each_player(function(player) {
-			states[player.id] = {
-pos: player.pos,
-is: player.last_input_seq,
-dead: player.is_dead
-};
-});
+    states[player.id] = {
+      pos: player.pos,
+      is: player.last_input_seq,
+      dead: player.is_dead
+      };
+  });
 
-var enemy_states = {};
+  var enemy_states = {};
 
-this.for_each_enemy(function(enemy) {
-		enemy_states[enemy.id] = {
-pos: enemy.pos
-};
-});
+  this.for_each_enemy(function(enemy) {
+      enemy_states[enemy.id] = {
+  pos: enemy.pos
+  };
+  });
 
   var item_states = {};
 
@@ -932,11 +926,11 @@ pos: enemy.pos
 	this.laststate = {
 		player_states : states,
 		enemy_states : enemy_states,
-	    item_states : item_states,
+    item_states : item_states,
 		t   : this.server_time                      // our current local time on the server
 	};
 
-this.broadcast('onserverupdate', this.laststate);
+  this.broadcast('onserverupdate', this.laststate);
 }; //game_core.server_update
 
 game_core.prototype.handle_server_input = function(client, input, input_time, input_seq) {
@@ -1110,7 +1104,7 @@ game_core.prototype.client_process_net_updates = function() {
 
 	//calculate update delay
 	if (this.network_delay > 0.1 && this.delay_timer <= 0) {
-		console.log('Server packet is start to be delayed.. delay_time: ' + this.network_delay.fixed(3) 
+		console.log('Server packet is start to be delayed.. delay_time: ' + this.network_delay.fixed(3)
 				+ ' last_server_time: ' + this.server_time.fixed(3) + ' client_time: ' + this.client_time.fixed(3)
 				+ ' stable_time: ' + (this.server_time - this.client_time).fixed(3));
 		this.delay_timer = this.delay_time;
@@ -1121,7 +1115,7 @@ game_core.prototype.client_process_net_updates = function() {
 		if (delay > 0.1) {
 			console.log('Server update delayed for ' + this.network_delay + 'sec');
 		}
-	} 
+	}
 	this.last_server_time = this.server_time;
 
 	//Find the position in the timeline of updates we stored.
@@ -1218,23 +1212,6 @@ game_core.prototype.client_process_net_updates = function() {
 				player.p_body.position = this.p_vec2(this.pos(this.ghosts[id].client_pos.pos));
 			}
 		}.bind(this));
-
-    (function() {
-      for (var id in this.items) {
-        if (!target.item_states[id] || !previous.item_states[id]) continue;
-
-        var other_target_pos = target.item_states[id].pos;
-        var other_past_pos = previous.item_states[id].pos;
-
-        var client_pos = this.v_lerp(other_past_pos, other_target_pos, time_point);
-        var other = this.items[id];
-        if (this.client_smoothing) {
-          other.p_body_position = this.p_vec2(this.pos(client_pos));
-        } else {
-          other.p_body_position = this.p_vec2(this.pos(client_pos));
-        }
-      }
-    })();
 
 		this.for_each_enemy(function(enemy) {
 			var id = enemy.id;
@@ -1526,7 +1503,7 @@ game_core.prototype.client_create_configuration = function() {
 
 	this.network_delay = 0.0;						//packet delay from server. minimum delay is packet sending period of server.
 	this.delay_time = 0.3;							//delay log time
-	
+
 
 	this.dt = 0.016;                    //The time that the last frame took to run
 	this.fps = 0;                       //The current instantaneous fps (1/this.dt)
@@ -1611,7 +1588,7 @@ game_core.prototype.client_on_receive_player_info = function(data) {
 		player.id = p_info.id;
 		this.players[p_info.id] = player;
 		this.players[p_info.id].pos = p_info.pos;
-		this.players[p_info.id].color = '#ffffff';
+		//this.players[p_info.id].color = '#ffffff';
 		this.ghosts[p_info.id] = {
 			server_pos: new game_player(this, undefined, true),
 			client_pos: new game_player(this, undefined, true)
@@ -1621,9 +1598,9 @@ game_core.prototype.client_on_receive_player_info = function(data) {
 			var self = this.players.self;
 
 			this.players.self = player;
-			player.color = '#cc0000';
+			//player.color = '#cc0000';
 			player.id = self.id;
-			player.info_color = '#cc0000';
+			//player.info_color = '#cc0000';
 		}
 	}.bind(this));
 };
@@ -1934,8 +1911,12 @@ p2.Circle.prototype.draw = function(pos, color, border_color) {
 	game.ctx.stroke();
 };
 
-p2.Box.prototype.draw = function(pos) {
-	game.ctx.fillStyle = '#ffffff';
+p2.Box.prototype.draw = function(pos, color) {
+  if (color) {
+    game.ctx.fillStyle = color;
+  }else {
+    game.ctx.fillStyle = '#ffffff';
+  }
 
 	game.ctx.fillRect((pos.x - this.width / 2.0) * game.viewport.res_mul, (pos.y - this.height / 2.0) * game.viewport.res_mul, this.width * game.viewport.res_mul, this.height * game.viewport.res_mul);
 };

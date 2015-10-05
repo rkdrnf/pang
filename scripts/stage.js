@@ -14,11 +14,11 @@ var c_stage = module.exports = function(game_instance) {
 	this.enemy_spawn_infos = [];
 
 	this.item_spawn_infos = [
-	{ time : 2, pos: {x: 4, y: 4}, radius: 0.5, type: this.game.item_effect.WEAPON},
-	{ time : 3, pos: {x: 5, y: 3}, radius: 0.5, type: this.game.item_effect.VIAGRA},
+	{ time : 2, pos: {x: 4, y: 4}, radius: 0.5, type: Const.item.shield},
+	/*{ time : 3, pos: {x: 5, y: 3}, radius: 0.5, type: this.game.item_effect.VIAGRA},
 	{ time : 4, pos: {x: 7, y: 6}, radius: 0.5, type: this.game.item_effect.WEAPON},
 	{ time : 5, pos: {x: 9, y: 5}, radius: 0.5, type: this.game.item_effect.VIAGRA},
-	];
+*/	];
 
 	this.timer_job = {
 		STAGE_END 	: 0,
@@ -113,7 +113,7 @@ c_stage.prototype.end_stage = function(reason) {
 	} else {
 		if (reason === this.new_stage_reason.GAME_OVER) {
 			this.game.ui_manager.send_event(Const.ui.main_text_ui, 'show_end');
-		} else if (reason === this.new_stage_reason.NEXT_STAGE) { 
+		} else if (reason === this.new_stage_reason.NEXT_STAGE) {
 			this.game.ui_manager.send_event(Const.ui.main_text_ui, 'show_next');
 	  }
 	}
@@ -145,10 +145,14 @@ c_stage.prototype.make_random_enemies = function() {
 		var bounce_count = Math.floor(Math.random() * (bounce_count_variance.max - bounce_count_variance.min) + bounce_count_variance.min);
 		var bounciness = Math.floor(this.game.enemy_material_level * (1 - (1 / ((1 + bounce_count) * 0.75))));
 		var spawn_coord = {
+<<<<<<< HEAD
 			x: Math.random() * (this.game.world.width - (radius * 2)) + radius, 
+=======
+			x: Math.random() * (this.game.world.width),
+>>>>>>> e0ac063e4cebab3593f7652929f387943d610047
 			y: -(radius + 1)
 		};
-		
+
 		this.enemy_spawn_infos.push({
 			time: spawn_time,
 			pos: spawn_coord,
@@ -171,7 +175,7 @@ c_stage.prototype.add_enemy = function(info) {
 };
 
 c_stage.prototype.add_item = function(info) {
-	this.game.add_item(info.radius, info.pos);
+	this.game.add_item(info.radius, info.pos, info.type);
 };
 
 c_stage.prototype.clear_items = function() {
@@ -199,7 +203,7 @@ c_stage.prototype.on_timer = function(job_id, info) {
 		return;
 	}
 
-	if(job_id == this.timer_job.SPAWN_ITEM) {
+	if(job_id === this.timer_job.SPAWN_ITEM) {
 		this.add_item(info);
 		return;
 	}
