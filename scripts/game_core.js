@@ -394,10 +394,9 @@ game_core.prototype.add_item = function(radius, pos, type) {
   if (type === Const.item.shield) {
     var item = new i_shield(this, item_id, radius, pos, type);
     this.items[item_id] = item;
+    this.broadcast('spawn_item', item.get_info());
   }
-  this.broadcast('spawn_item', item.get_info());
-};
-
+}
 game_core.prototype.client_spawn_item = function(info) {
   console.log('On receive spawn item');
   if (info.type == Const.item.shield) {
@@ -872,20 +871,20 @@ game_core.prototype.server_update = function(){
 	var states = {};
 
 	this.for_each_player(function(player) {
-			states[player.id] = {
-pos: player.pos,
-is: player.last_input_seq,
-dead: player.is_dead
-};
-});
+    states[player.id] = {
+      pos: player.pos,
+      is: player.last_input_seq,
+      dead: player.is_dead
+      };
+  });
 
-var enemy_states = {};
+  var enemy_states = {};
 
-this.for_each_enemy(function(enemy) {
-		enemy_states[enemy.id] = {
-pos: enemy.pos
-};
-});
+  this.for_each_enemy(function(enemy) {
+      enemy_states[enemy.id] = {
+  pos: enemy.pos
+  };
+  });
 
   var item_states = {};
 
@@ -899,11 +898,11 @@ pos: enemy.pos
 	this.laststate = {
 		player_states : states,
 		enemy_states : enemy_states,
-	    item_states : item_states,
+    item_states : item_states,
 		t   : this.server_time                      // our current local time on the server
 	};
 
-this.broadcast('onserverupdate', this.laststate);
+  this.broadcast('onserverupdate', this.laststate);
 }; //game_core.server_update
 
 game_core.prototype.handle_server_input = function(client, input, input_time, input_seq) {

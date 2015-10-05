@@ -192,7 +192,7 @@ c_stage.prototype.on_timer = function(job_id, info) {
 		return;
 	}
 
-	if(job_id == this.timer_job.SPAWN_ITEM) {
+	if(job_id === this.timer_job.SPAWN_ITEM) {
 		this.add_item(info);
 		return;
 	}

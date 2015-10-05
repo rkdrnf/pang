@@ -4,12 +4,7 @@ var c_item = require('./items.js');
 
 /* Shield */
 var i_shield = module.exports = function(game, id, radius, pos, type) {
-  c_item.call(this, game, id, type);
-
-  this.pos = {x:30, y:50};
-  if (pos) {
-    this.pos = pos;
-  }
+  c_item.call(this, game, id, pos, radius, type);
 
   this.pray = 5;
   this.p_body = new p2.Body({
@@ -26,7 +21,7 @@ var i_shield = module.exports = function(game, id, radius, pos, type) {
 
   this.p_body.addShape(this.p_shape);
   this.p_body.item_object = this;
-  //this.game.physics_world.addBody(this.p_body);
+  this.game.physics_world.addBody(this.p_body);
 }
 
 i_shield.prototype = Object.create(c_item.prototype);

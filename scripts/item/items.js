@@ -1,7 +1,12 @@
-var c_item = function(game, id, type) {
+var c_item = function(game, id, pos, radius, type) {
   this.game = game;
   this.id = id;
   this.type = type;
+
+  this.pos = {x:30, y:50};
+  if (pos) {
+    this.pos = pos;
+  }
 };
 
 c_item.prototype.get_info = function() {
