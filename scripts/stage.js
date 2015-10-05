@@ -136,19 +136,26 @@ c_stage.prototype.make_random_enemies = function() {
 	var enemies_count = this.level * 5 + 20;
 
 	var radius_variance = { min: 1, max: 3 + this.level * 0.2 };
+	var bounce_count_variance = { min: 0, max: 1 + this.level * 0.5 };
 
 	for(var i = 0; i < enemies_count; i++) {
 		var spawn_time = Math.random() * (this.stage_time - 4);
 		var radius = Math.random() * (radius_variance.max - radius_variance.min) + radius_variance.min;
+		var mass = 1 + radius / 3;
+		var bounce_count = Math.floor(Math.random() * (bounce_count_variance.max - bounce_count_variance.min) + bounce_count_variance.min);
+		var bounciness = Math.floor(this.game.enemy_material_level * (1 - (1 / ((1 + bounce_count) * 0.75))));
 		var spawn_coord = {
-			x: Math.random() * (this.game.world.width), 
+			x: Math.random() * (this.game.world.width - (radius * 2)) + radius, 
 			y: -(radius + 1)
 		};
 		
 		this.enemy_spawn_infos.push({
 			time: spawn_time,
 			pos: spawn_coord,
-			radius: radius
+			radius: radius,
+			mass: mass,
+			bounciness: bounciness,
+			bounce_count: bounce_count
 		});
 	}
 };
@@ -160,7 +167,7 @@ c_stage.prototype.game_over = function() {
 
 //add enemies by stage's own rule
 c_stage.prototype.add_enemy = function(info) {
-	this.game.add_enemy(info.radius, info.pos);
+	this.game.add_enemy(info);
 };
 
 c_stage.prototype.add_item = function(info) {

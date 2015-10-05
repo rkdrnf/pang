@@ -66,6 +66,18 @@ width : 30,
 		WALL: Math.pow(2,5)
 	};
 
+
+	this.enemy_materials = [];
+	this.enemy_material_level = 8;
+
+	this.ground_material = new p2.Material();
+	this.player_material = new p2.Material();
+	
+	this.make_ground_and_wall();
+
+	this.make_enemy_materials(this.enemy_material_level);
+
+
 	this.physics_change_list = {};
 	this.after_physics = [];
 
@@ -83,18 +95,6 @@ width : 30,
 	this.enemies = {};
   this.items = {};
 
-	this.groundBody = new p2.Body({
-		mass:0,
-		angle: Math.PI,
-		position: [0, this.world.height - 1]
-	});
-	var groundShape = new p2.Plane();
-
-	groundShape.collisionGroup = this.collision_group.GROUND;
-	groundShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY | this.collision_group.ITEM;
-	this.groundBody.addShape(groundShape);
-	this.physics_world.addBody(this.groundBody);
-	this.make_ground_and_wall();
 
 
 	if (this.server) {
@@ -203,13 +203,7 @@ game_core.prototype.init_physics_world = function() {
 		var enemy_obj = enemyshape.body.game_object;
 
 		if (enemy_obj) {
-			this.after_physics.push({ 
-				func: function() {
-						enemy_obj.network_destroy();
-						delete this.enemies[enemy_obj.id];
-					}, 
-				caller: this 
-			});
+			enemy_obj.on_collide_with_ground();
 		}
 	};
 
@@ -234,6 +228,26 @@ game_core.prototype.init_physics_world = function() {
 	}.bind(this));
 };
 
+game_core.prototype.make_enemy_materials = function(level) {
+	for(var i = 0; i < level; i++) {
+		var material = new p2.Material();
+		this.enemy_materials.push(material);
+
+		var enemy_ground_c_material = new p2.ContactMaterial(material, this.ground_material, {
+			restitution: 0.8 * (1 - (1 / i)),
+			stiffness: Number.MAX_VALUE
+		});
+		
+		var enemy_player_c_material = new p2.ContactMaterial(material, this.player_material, {
+			restitution: 0.8 * ((1 - 1 / i)),
+			stiffness: Number.MAX_VALUE
+		});
+		
+		this.physics_world.addContactMaterial(enemy_ground_c_material);
+		this.physics_world.addContactMaterial(enemy_player_c_material);
+	}
+};
+
 game_core.prototype.make_ground_and_wall = function() {
 	this.groundBody = new p2.Body({
 		mass:0,
@@ -243,7 +257,8 @@ game_core.prototype.make_ground_and_wall = function() {
 	var groundShape = new p2.Plane();
 
 	groundShape.collisionGroup = this.collision_group.GROUND;
-	groundShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY;
+	groundShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY | this.collision_group.ITEM;
+	groundShape.material = this.ground_material;
 	this.groundBody.addShape(groundShape);
 	this.physics_world.addBody(this.groundBody);
 
@@ -255,7 +270,8 @@ game_core.prototype.make_ground_and_wall = function() {
 	var leftWallShape = new p2.Plane();
 
 	leftWallShape.collisionGroup = this.collision_group.WALL;
-	leftWallShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY;
+	leftWallShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY | this.collision_group.ITEM;
+	leftWallShape.material = this.ground_material;
 	this.leftWall.addShape(leftWallShape);
 	this.physics_world.addBody(this.leftWall);
 
@@ -267,7 +283,8 @@ game_core.prototype.make_ground_and_wall = function() {
 	var rightWallShape = new p2.Plane();
 
 	rightWallShape.collisionGroup = this.collision_group.WALL;
-	rightWallShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY;
+	rightWallShape.collisionMask = this.collision_group.PLAYER | this.collision_group.ENEMY | this.collision_group.ITEM;
+	rightWallShape.material = this.ground_material;
 	this.rightWall.addShape(rightWallShape);
 	this.physics_world.addBody(this.rightWall);
 };
@@ -356,9 +373,9 @@ game_core.prototype.fire_weapon = function(player) {
 };
 
 // methods deal with add, spawn, clear enemies
-game_core.prototype.add_enemy = function(radius, pos) {
+game_core.prototype.add_enemy = function(info) {
 	var enemy_id = uuid.v1();
-	var enemy = new c_enemy(this, enemy_id, radius, pos);
+	var enemy = new c_enemy(this, enemy_id, info);
 	this.enemies[enemy_id] = enemy;
 
 	this.broadcast('spawn_enemy', enemy.get_info());
@@ -366,7 +383,7 @@ game_core.prototype.add_enemy = function(radius, pos) {
 
 game_core.prototype.client_spawn_enemy = function(info) {
 	console.log('On receive spawn enemy');
-	this.enemies[info.id] = new c_enemy(this, info.id, info.radius, info.pos);
+	this.enemies[info.id] = new c_enemy(this, info.id, info);
 };
 
 game_core.prototype.client_spawn_projectile = function(info) {
@@ -380,20 +397,31 @@ game_core.prototype.receive_enemy_info = function(info) {
 	}.bind(this));
 };
 
+game_core.prototype.client_enemy_change_border_color = function(info) {
+	var enemy = this.enemies[info.id];
+	if (enemy) {
+		enemy.client_change_border_color(info.bounce_count);
+	}
+};
+
 game_core.prototype.client_destroy_enemy = function(id) {
 	var enemy =	this.enemies[id];
 
 	if (enemy) {
 		enemy.destroy();
-		delete this.enemies[id]
+		this.remove_enemy(id);
 	}
 };
 game_core.prototype.clear_enemies = function() {
 	console.log('Clear enemies');
 	this.for_each_enemy(function(enemy) {
 		enemy.destroy();
-		delete this.enemies[enemy.id];
+		this.remove_enemy(enemy.id);
 	}.bind(this));
+};
+
+game_core.prototype.remove_enemy = function(id) {
+	delete this.enemies[id];
 };
 
 // methods deal with add, spawn, clear items
@@ -1825,6 +1853,7 @@ game_core.prototype.client_connect_to_server = function() {
 	this.socket.on('spawn_item', this.client_spawn_item.bind(this));
 	this.socket.on('spawn_projectile', this.client_spawn_projectile.bind(this));
 	this.socket.on('destroy_enemy', this.client_destroy_enemy.bind(this));
+	this.socket.on('enemy_change_border_color', this.client_enemy_change_border_color.bind(this));
 }; //game_core.client_connect_to_server
 
 
@@ -1875,25 +1904,34 @@ game_core.prototype.client_draw_info = function() {
 
 };
 
-p2.Body.prototype.draw = function(color) {
+p2.Body.prototype.draw = function(color, border_color) {
 	this.shapes.forEach(function(shape){
 		shape.draw({
 			x: this.position[0],
 			y: this.position[1]
-		}, color);
+		}, color, border_color);
 	}.bind(this));
 };
 
-p2.Circle.prototype.draw = function(pos, color) {
+p2.Circle.prototype.draw = function(pos, color, border_color) {
 	if (color) {
 		game.ctx.fillStyle = color;
 	} else {
 		game.ctx.fillStyle = '#ffffff';
 	}
 
+	game.ctx.lineWidth = 5;
+	if (border_color) {
+		game.ctx.strokeStyle = border_color;
+	} else {
+		game.ctx.strokeStyle = '#ffffff';
+	}
+
 	game.ctx.beginPath();
 	game.ctx.arc(pos.x * game.viewport.res_mul, pos.y * game.viewport.res_mul, this.radius * game.viewport.res_mul, 0, 2 * Math.PI, false);
+	game.ctx.closePath();
 	game.ctx.fill();
+	game.ctx.stroke();
 };
 
 p2.Box.prototype.draw = function(pos) {

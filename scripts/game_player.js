@@ -47,6 +47,7 @@ var game_player = module.exports = function( game_instance, player_instance, is_
 
 		this.p_shape.collisionGroup = this.game.collision_group.PLAYER;
 		this.p_shape.collisionMask = this.game.collision_group.GROUND | this.game.collision_group.ENEMY | this.game.collision_group.ITEM | this.game.collision_group.WALL;
+		this.p_shape.material = this.game.player_material;
 		this.p_body.addShape(this.p_shape);
 		this.p_body.game_object = this;
 	}
