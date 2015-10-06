@@ -3,6 +3,7 @@ var uuid = require('node-uuid');
 var Const = require('./const.js');
 var p2 = require('p2');
 var i_shield = require('./item/shield.js');
+var g_buff_manager = require('./buff/buff_manager.js');
 var game_player = module.exports = function( game_instance, player_instance, is_ghost ) {
 
 	//Store the instance, if any
@@ -28,6 +29,7 @@ var game_player = module.exports = function( game_instance, player_instance, is_
 	this.fire_rate = 2;
 
   this.items = {};
+	this.buffs = {};
 	this.width = 1;
 	this.height = 1;
 
@@ -84,6 +86,12 @@ game_player.prototype.on_timer_tick = function(dt) {
 	this.fire_timer -= dt;
 };
 
+game_player.prototype.for_each_buff = function(func) {
+	Object.keys(this.buffs).forEach(function(id) {
+		func.call(this, this.buffs[id]);
+	}.bind(this));
+};
+
 game_player.prototype.fire = function(){
 	this.weapon.fire();
 }; //game_player.fire
@@ -105,7 +113,17 @@ game_player.prototype.clear_items = function() {
   }.bind(this));
 };
 
-game_player.prototype.die = function() {
+game_player.prototype.die = function(reason) {
+
+	this.die_internal(reason);
+
+	if (this.game.server) {
+
+		this.game.stage.on_player_die(this);
+	}
+};
+
+game_player.prototype.die_internal = function(reason) {
 	console.log('player is dead');
 	this.is_dead = true;
   this.clear_items();
@@ -125,6 +143,10 @@ game_player.prototype.draw = function(){
 	if (!this.is_dead)
 	{
 		this.p_body.draw(this.color);
+
+		this.for_each_buff(function(buff) {
+			buff.draw(this);
+		});
 	}
 };
 
@@ -139,21 +161,105 @@ game_player.prototype.destroy = function() {
 	this.game = null;
 };
 
-/* Determine player must die. */
-game_player.prototype.isDead = function() {
-  if (this.items[Const.item.shield]) {
-    var _shield = this.items[Const.item.shield];
-    if (_shield.survive()) {
-      return false;
-    }else {
-      _shield.destroy();
-      delete this.items[Const.item.shield];
-    }
-  }
-  return true;
-}
+game_player.prototype.on_collide_with_enemy = function(enemy) {
+	if (this.is_invulnerable()) { return; }
+
+	if (this.has_shield()) { return; }
+	
+
+	this.after_physics(this.die);
+};
+
+game_player.prototype.after_physics = function(func) {
+	this.game.after_physics.push({
+		func: func,
+		caller: this
+	});
+};
+
+game_player.prototype.has_shield = function() {
+	var shield = this.items[Const.item.shield];
+	
+	if (!shield) return false;
+
+	if (shield.survive()) {
+		return true;
+	}
+
+	shield.destroy();
+	delete this.items[Const.item.shield];
+	return false;
+};
+
+game_player.prototype.is_invulnerable = function() {
+	return this.has_buff(Const.buff.stage_invulnerable);
+};
 
 game_player.prototype.applyitem = function(item) {
   this.items[item.type] = item;
   item.makeEffect(this);
+};
+
+game_player.prototype.has_buff = function(buff_name) {
+	return this.buffs[buff_name] != (undefined || null);
+};
+
+game_player.prototype.give_buff = function(buff_name) {
+	var buff = this.buffs[buff_name];
+
+	if (buff) {
+		buff.duplicate();
+	} else {
+		this.buffs[buff_name] = g_buff_manager.new_buff(this, buff_name);
+	}
+
+	var buff = this.buffs[buff_name];
+
+	buff.apply_effect(this);
+
+	if (this.game.server) {
+		this.server_give_buff(buff);
+	}
+};
+
+game_player.prototype.server_give_buff = function(buff) {
+
+	this.game.broadcast('overwrite_buff', {
+		id: this.id,
+		buff_name:	buff.buff_name, 
+		buff_info: buff.get_info()
+	})
+};
+
+game_player.prototype.remove_buff = function(buff_name) {
+	var buff = this.buffs[buff_name];
+
+	if (!buff) return;
+
+	buff.remove_effect(this);
+	buff.destroy();
+	delete this.buffs[buff_name];
+
+	if (this.game.server) {
+		this.server_remove_buff(buff_name);
+	}
+};
+
+game_player.prototype.server_remove_buff = function(buff_name) {
+	this.game.broadcast('remove_buff', {
+		id: this.id,
+		buff_name: buff_name
+	});
+};
+
+game_player.prototype.overwrite_buff = function(buff_name, info) {
+	var buff = this.buffs[buff_name];
+	if (buff) {
+		this.remove_buff(buff_name);
+	}
+
+	this.buffs[buff_name] = g_buff_manager.new_buff(this, buff_name, info);
+
+	var new_buff = this.buffs[buff_name];
+	new_buff.apply_effect(this);
 };

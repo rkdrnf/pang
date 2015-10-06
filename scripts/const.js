@@ -13,5 +13,17 @@ module.exports = {
     magnet: 'item_magnet',
     bat: 'item_bat',
     icecream: 'item_icecream'
-  }
+  },
+
+	player: {
+		death_reason: {
+			enemy_collide: 'enemy',
+			game_over: 'game_over'
+		}
+	},
+
+	buff: {
+		stage_invulnerable: 'stage_invulnerable'
+	}
+
 }

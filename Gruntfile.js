@@ -5,7 +5,7 @@ module.exports = function(grunt) {
 			options: {
 				ignores: ['scripts/client_game.js']
 			},
-			all: ['Gruntfile.js', 'scripts/*.js'],
+			all: ['Gruntfile.js', 'scripts/*.js', 'scripts/**/*.js'],
 
 		},
 		watch: {
@@ -20,7 +20,11 @@ module.exports = function(grunt) {
 		browserify: {
 			client: {
 				files: {
-					'scripts/client_game.js' : ['scripts/game_core.js', 'scripts/!(game_server|client|client_game).js']
+					'scripts/client_game.js' : [
+						'scripts/game_core.js', 
+						'scripts/!(game_server|client|client_game).js', 
+						'scripts/buff/*.js',
+						'scripts/item/*.js']
 				}
 			}
 		}

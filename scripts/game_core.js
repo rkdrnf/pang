@@ -153,14 +153,7 @@ game_core.prototype.init_physics_world = function() {
 
 		var player_obj = playerShape.body.game_object;
 		if (player_obj) {
-      if (player_obj.isDead()) {
-			  this.after_physics.push({
-          func: function() {
-            this.player_die(player_obj);
-            },
-          caller: this
-        });
-      }
+			player_obj.on_collide_with_enemy(enemyShape.game_object);
 		}
 	};
 
@@ -364,6 +357,22 @@ game_core.prototype.fire_weapon = function(player) {
 	this.broadcast('spawn_projectile', projectile.get_info());
 };
 
+game_core.prototype.client_overwrite_buff = function(data) {
+	var player = this.players[data.id];
+
+	if (!player) return;
+
+	player.overwrite_buff(data.buff_name, data.buff_info);
+};
+
+game_core.prototype.client_remove_buff = function(data) {
+	var player = this.players[data.id];
+
+	if (!player) return;
+
+	player.remove_buff(data.buff_name);
+};
+
 // methods deal with add, spawn, clear enemies
 game_core.prototype.add_enemy = function(info) {
 	var enemy_id = uuid.v1();
@@ -472,16 +481,6 @@ game_core.prototype.new_player = function(player) {
 		players: existing_infos
 	});
 
-	var enemies_info = [];
-	this.for_each_enemy(function(enemy) {
-		enemies_info.push(enemy.get_info());
-		});
-
-  var items_info = [];
-  this.for_each_item(function(item) {
-    items_info.push(item.get_info());
-  });
-
 	//create stage if stage is null
 	if (!this.stage) {
 		console.info('Start stage create');
@@ -489,13 +488,8 @@ game_core.prototype.new_player = function(player) {
 	}
 	else {
 		//send current stage info to new player.
-		new_player.instance.emit('current_stage', {
-			time_left: this.stage.time_left,
-			enemies_info: enemies_info,
-      items_info: items_info
-		});
-}
-
+		this.stage.send_stage_info(new_player);
+	}
 };
 
 game_core.prototype.create_stage = function() {
@@ -503,81 +497,25 @@ game_core.prototype.create_stage = function() {
 	this.stage.start();
 };
 
-game_core.prototype.on_new_stage = function(stage) {
-	this.broadcast('new_stage', {
-		time_left: stage.time_left
-	});
-};
-
-game_core.prototype.on_stage_end = function(time, reason) {
-	this.broadcast('end_stage', {
-		time_left: time,
-		reason: reason
-	});
-};
-
-game_core.prototype.on_stage_ready = function(time, reason) {
-	this.clear_enemies();
-	this.clear_items();
-
-	if (this.server) {
-		this.for_each_player(function(player) {
-			this.player_revive(player);
-		}.bind(this));
-
-		this.broadcast('ready_stage', {
-			time_left: time,
-			reason: reason
-		});
-	}
-}
-
 game_core.prototype.client_on_new_stage = function(data) {
 	console.log('On receive new stage');
-	this.stage.client_new_stage(data.time_left);
+	this.stage.new_stage(data.reason, data.time_left);
 };
 
 game_core.prototype.client_on_current_stage = function(data) {
 	console.log('On receive current stage');
-	this.stage.client_current_stage(data.time_left, data.enemies_info, data.items_info);
+	this.stage.client_current_stage(data.state, data.time_left, data.enemies_info, data.items_info);
 };
 
 game_core.prototype.client_on_stage_ready = function(data) {
 	console.log('On receive stage ready');
-	this.stage.ready_stage(data.reason);
+	this.stage.ready_stage(data.reason, data.time_left);
 };
 
 game_core.prototype.client_on_stage_end = function(data) {
 	console.log('On receive stage end');
-	this.stage.end_stage(data.reason);
+	this.stage.end_stage(data.reason, data.time_left);
 }
-
-game_core.prototype.player_die = function(player) {
-	player.die();
-
-	if (this.server) {
-		this.on_player_die();
-	}
-};
-
-game_core.prototype.player_revive = function(player) {
-	player.revive();
-};
-
-game_core.prototype.on_player_die = function() {
-	var any_alive = Object.keys(this.players).some(function(id) {
-		return this.players[id].is_dead === false;
-	}.bind(this));
-
-	if (!any_alive) {
-		console.log('all dead');
-		this.on_all_died();
-	}
-};
-
-game_core.prototype.on_all_died = function() {
-	this.stage.game_over();
-};
 
 // (4.22208334636).fixed(n) will return fixed point value to n places, default n = 3
 Number.prototype.fixed = function(n) { n = n || 3; return parseFloat(this.toFixed(n)); };
@@ -1181,9 +1119,9 @@ game_core.prototype.client_process_net_updates = function() {
 
 			if (player.is_dead !== latest_server_data.player_states[id].dead) {
 				if (latest_server_data.player_states[id].dead) {
-					this.player_die(player);
+					player.die();
 				} else {
-					this.player_revive(player);
+					player.revive();
 				}
 			}
 		});
@@ -1578,9 +1516,9 @@ game_core.prototype.client_on_receive_player_info = function(data) {
 	data.players.forEach(function(p_info, index, arr) {
 		var player = new game_player(this, undefined, false);
 		if (p_info.is_dead) {
-			this.player_die(player);
+			player.die();
 		} else {
-			this.player_revive(player);
+			player.revive();
 		}
 
 		player.state = 'connected';
@@ -1831,6 +1769,9 @@ game_core.prototype.client_connect_to_server = function() {
 	this.socket.on('spawn_projectile', this.client_spawn_projectile.bind(this));
 	this.socket.on('destroy_enemy', this.client_destroy_enemy.bind(this));
 	this.socket.on('enemy_change_border_color', this.client_enemy_change_border_color.bind(this));
+
+	this.socket.on('overwrite_buff', this.client_overwrite_buff.bind(this));
+	this.socket.on('remove_buff', this.client_remove_buff.bind(this));
 }; //game_core.client_connect_to_server
 
 

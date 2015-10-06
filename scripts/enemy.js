@@ -34,7 +34,6 @@ var c_enemy = module.exports = function(game, id, info) {
 
 	if (info.vel) {
 		vel = info.vel;	
-		console.log(vel);
 	}
 
 	this.p_body = new p2.Body({

@@ -33,6 +33,15 @@ var c_stage = module.exports = function(game_instance) {
 		GAME_OVER : 1,
 		NEXT_STAGE : 2
 	};
+
+	this.state_type = {
+		IN_STAGE : 'IN_STAGE',
+		STAGE_END : 'STAGE_END',
+		READY : 'READY',
+		BOSS : 'BOSS'
+	};
+
+	this.state = this.state_type.READY;
 };
 
 
@@ -41,15 +50,29 @@ c_stage.prototype = Object.create(c_timer.prototype);
 c_stage.prototype.start = function() {
 	this.game.register_timer(this);
 	console.log('stage timer registered');
+
 	if (this.game.server) {
-		this.ready_stage(this.new_stage_reason.NEW_GAME);
+		this.ready_stage(this.new_stage_reason.NEW_GAME, this.ready_time);
 	}
 };
 
-c_stage.prototype.server_new_stage= function(reason) {
+c_stage.prototype.new_stage = function(reason, time) {
+	if (this.state !== this.state_type.READY) {
+		console.log('Invalid stage state conversion. ' + this.state + ' to ' + this.state_type.IN_STAGE);
+	}
+	this.state = this.state_type.IN_STAGE;
+	this.time_left = time;
+
+	if (this.game.server) {
+		this.on_server_new_stage(reason);
+	} else { 
+		this.on_client_new_stage(reason, time);
+	}
+};
+
+c_stage.prototype.on_server_new_stage = function(reason) {
 	this.adjust_difficulty(reason);
 
-	this.time_left = this.stage_time;
 	this.game.add_timer(this.timer_id, this.timer_job.STAGE_END, this.time_left, { reason: this.new_stage_reason.NEXT_STAGE });
 
 	this.make_random_enemies();
@@ -62,16 +85,39 @@ c_stage.prototype.server_new_stage= function(reason) {
 		this.game.add_timer(this.timer_id, this.timer_job.SPAWN_ITEM, info.time, info);
 	}.bind(this));
 
-	this.game.on_new_stage(this);
+	this.make_players_vulnerable();
+
+	this.game.broadcast('new_stage', {
+		reason: reason,
+		time_left: this.time_left
+	});
 };
 
-c_stage.prototype.client_new_stage = function(t) {
-	this.time_left = t;
-
+c_stage.prototype.on_client_new_stage = function(reason, time) {
 	this.game.ui_manager.send_event(Const.ui.main_text_ui, 'show_start');
 };
 
-c_stage.prototype.client_current_stage = function(t, enemies_info, items_info) {
+c_stage.prototype.send_stage_info = function(player) { 
+	var enemies_info = [];
+	this.game.for_each_enemy(function(enemy) {
+		enemies_info.push(enemy.get_info());
+	});
+
+	var items_info = [];
+	this.game.for_each_item(function(item) {
+		items_info.push(item.get_info());
+	});
+
+	player.instance.emit('current_stage', {
+		state: this.state,
+		time_left: this.time_left,
+		enemies_info: enemies_info,
+		items_info: items_info
+	});
+};
+
+c_stage.prototype.client_current_stage = function(state, t, enemies_info, items_info) {
+	this.state = state;
 	this.time_left = t;
 	this.game.receive_enemy_info(enemies_info);
 	this.game.receive_item_info(items_info);
@@ -98,37 +144,80 @@ c_stage.prototype.adjust_difficulty = function(reason) {
 
 };
 
-c_stage.prototype.end_stage = function(reason) {
+c_stage.prototype.end_stage = function(reason, time) {
+	if (this.state !== this.state_type.IN_STAGE) {
+		console.log('Invalid stage state conversion. ' + this.state + ' to ' + this.state_type.END_STAGE);
+	}
+	this.state = this.state_type.STAGE_END;
+
 	if (this.game.server) {
-		if (reason === this.new_stage_reason.GAME_OVER) {
-			this.game.cancel_timer_job(this.timer_id, this.timer_job.STAGE_END);
-		}
-
-		this.game.cancel_timer_job(this.timer_id, this.timer_job.SPAWN_ENEMY);
-		this.game.cancel_timer_job(this.timer_id, this.timer_job.SPAWN_ITEM);
-
-		this.game.on_stage_end(this.end_time, reason);
-
-		this.game.add_timer(this.timer_id, this.timer_job.STAGE_READY, this.end_time, { reason: reason });
+		this.on_server_stage_end(reason);
 	} else {
-		if (reason === this.new_stage_reason.GAME_OVER) {
-			this.game.ui_manager.send_event(Const.ui.main_text_ui, 'show_end');
-		} else if (reason === this.new_stage_reason.NEXT_STAGE) {
-			this.game.ui_manager.send_event(Const.ui.main_text_ui, 'show_next');
-	  }
+		this.on_client_stage_end(reason);
 	}
 };
 
-c_stage.prototype.ready_stage= function(reason) {
-	this.time_left = this.ready_time;
+c_stage.prototype.on_server_stage_end = function(reason) {
+	if (reason === this.new_stage_reason.GAME_OVER) {
+		this.game.cancel_timer_job(this.timer_id, this.timer_job.STAGE_END);
+	}
 
-	this.game.on_stage_ready(this.ready_time, reason);
+	if (reason === this.new_stage_reason.NEXT_STAGE) {
+		this.make_players_invulnerable();
+	}
+
+	this.game.cancel_timer_job(this.timer_id, this.timer_job.SPAWN_ENEMY);
+	this.game.cancel_timer_job(this.timer_id, this.timer_job.SPAWN_ITEM);
+
+	this.game.add_timer(this.timer_id, this.timer_job.STAGE_READY, this.end_time, { reason: reason });
+
+	this.game.broadcast('end_stage', {
+		time_left: this.end_time,
+		reason: reason
+	});
+};
+
+c_stage.prototype.on_client_stage_end = function(reason) {
+	if (reason === this.new_stage_reason.GAME_OVER) {
+		this.game.ui_manager.send_event(Const.ui.main_text_ui, 'show_end');
+	} else if (reason === this.new_stage_reason.NEXT_STAGE) {
+		this.game.ui_manager.send_event(Const.ui.main_text_ui, 'show_next');
+	}
+};
+
+c_stage.prototype.ready_stage= function(reason, time) {
+	if (this.state !== this.state_type.STAGE_END) {
+		console.log('Invalid stage conversion. ' + this.state + ' to ' + this.state_type.READY);
+	}
+
+	this.state = this.state_type.READY;
+	this.time_left = time;
+
+	this.game.clear_enemies();
+	this.game.clear_items();
 
 	if (this.game.server) {
-		this.game.add_timer(this.timer_id, this.timer_job.STAGE_NEW, this.ready_time, { reason: reason });
+		this.on_server_stage_ready(reason);
 	} else {
-		this.game.ui_manager.send_event(Const.ui.main_text_ui, 'show_ready');
+		this.on_client_stage_ready(reason);
 	}
+};
+
+c_stage.prototype.on_server_stage_ready = function(reason) {
+	this.game.add_timer(this.timer_id, this.timer_job.STAGE_NEW, this.ready_time, { reason: reason });
+
+	this.game.for_each_player(function(player) {
+		player.revive();
+	}.bind(this));
+
+	this.game.broadcast('ready_stage', {
+		time_left: this.ready_time,
+		reason: reason
+	});
+};
+
+c_stage.prototype.on_client_stage_ready = function(reason) {
+	this.game.ui_manager.send_event(Const.ui.main_text_ui, 'show_ready');
 };
 
 c_stage.prototype.make_random_enemies = function() {
@@ -170,9 +259,36 @@ c_stage.prototype.make_random_enemies = function() {
 	}
 };
 
+c_stage.prototype.on_player_die = function(player) {
+	var any_alive = Object.keys(this.game.players).some(function(id) {
+		return this.game.players[id].is_dead === false;
+	}.bind(this));
+
+	if (!any_alive) {
+		console.log('all dead');
+		this.on_all_died();
+	}
+};
+
+c_stage.prototype.on_all_died = function() {
+	this.game_over();
+};
+
 c_stage.prototype.game_over = function() {
 	var reason = this.new_stage_reason.GAME_OVER;
-	this.end_stage(reason);
+	this.end_stage(reason, this.end_time);
+};
+
+c_stage.prototype.make_players_invulnerable = function() {
+	this.game.for_each_player(function(player) {
+		player.give_buff(Const.buff.stage_invulnerable);
+	});
+};
+
+c_stage.prototype.make_players_vulnerable = function() {
+	this.game.for_each_player(function(player) {
+		player.remove_buff(Const.buff.stage_invulnerable);
+	});
 };
 
 //add enemies by stage's own rule
@@ -190,17 +306,17 @@ c_stage.prototype.clear_items = function() {
 
 c_stage.prototype.on_timer = function(job_id, info) {
 	if (job_id === this.timer_job.STAGE_END) {
-		this.end_stage(info.reason);
+		this.end_stage(info.reason, this.end_time);
 		return;
 	}
 
 	if (job_id === this.timer_job.STAGE_READY) {
-		this.ready_stage(info.reason);
+		this.ready_stage(info.reason, this.ready_time);
 		return;
 	}
 
 	if (job_id === this.timer_job.STAGE_NEW) {
-		this.server_new_stage(info.reason);
+		this.new_stage(info.reason, this.stage_time);
 		return;
 	}
 
