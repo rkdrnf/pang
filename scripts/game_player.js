@@ -114,6 +114,7 @@ game_player.prototype.clear_items = function() {
 };
 
 game_player.prototype.die = function(reason) {
+	if (this.is_dead) return;
 
 	this.die_internal(reason);
 
